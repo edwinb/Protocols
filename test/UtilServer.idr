@@ -29,7 +29,7 @@ parameters (Client : Ptr, Server : Ptr)
                  Done
 
   -- Calculate the type relative to the server and implement something which
-  -- follows the protocol, verified by the PROCESS effect
+  -- follows the protocol, verified by the MSG effect
 
   runServer : Agent IO util Server [STDIO] ()
   runServer = do cmd <- recvFrom Client
@@ -64,7 +64,7 @@ parameters (Client : Ptr, Server : Ptr)
                           [x, y] => Right (cast x, cast y)
                           _ => Left xs
 
--- We have a handler for the PROCESS effect which sends messages between
+-- We have a handler for the MSG effect which sends messages between
 -- threads. We could also, for example, write a handler which send data
 -- across a network (throwing an exception if the protocol was violated at
 -- run-time e.g. with some ill-formed message).

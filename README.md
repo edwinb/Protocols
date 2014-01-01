@@ -7,7 +7,7 @@ a String to 'B' and receives an integer back could be described as follows:
 
 ```
 aToB : Protocol [A, B] ()
-atoB = do A ==> B | String
+aToB = do A ==> B | String
           B ==> A | Int
           Done
 ```
@@ -62,7 +62,7 @@ How communication is handled in practice is independent of the protocol DSL,
 and depends on an effect handler being implemented for a particular context.
 
 The library currently includes an effect handler which supports communication
-between concurrent processes. See `text/UtilServer` for a simple example.
+between concurrent processes. See `test/UtilServer` for a simple example.
 
 
 
