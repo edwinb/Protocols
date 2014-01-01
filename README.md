@@ -29,8 +29,12 @@ b = do str <- recvFrom A
        sendTo A (length str)
 ```
 
-These are programs in the 'Effects' DSL.  It is a type error if either
-implementation does not follow its side of the protocol correctly.
+These are programs in the 'Effects' DSL. It is a type error if either
+implementation does not follow its side of the protocol correctly. Any
+additional effects required (such as `STDIO` here) can also be listed.
+This means that a protocol implementation can also invoke other effects,
+manage state, etc, provided that the protocol operations themselves are
+carried out in the correct order, and to completion.
 
 Since `Protocol` is an embedded DSL, it follows that we can write more
 complex protocols where later interactions depend on the results of earlier
