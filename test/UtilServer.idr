@@ -74,8 +74,8 @@ parameters (Client : Ptr, Server : Ptr)
 -- for itself)
 
 loop : Ptr -> IO ()
-loop me = do server <- fork (run [MkVal _, ()] (runServer me null))
-             run [MkVal _, ()] (runClient null server)
+loop me = do server <- fork (run [Proto, ()] (runServer me null))
+             run [Proto, ()] (runClient null server)
              loop me
 
 main : IO ()

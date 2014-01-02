@@ -8,24 +8,24 @@ data Actions : Type where
      DoRecv : (src : princ) -> (x : Type) -> (x -> Actions) -> Actions
      End : Actions
 
-data Val : a -> Type where
-     MkVal : (x : a) -> Val x 
+data ProtoT : a -> Type where
+     Proto : {x : a} -> ProtoT x 
 
 data Msg : Type -> Effect where
      SendTo   : (p : princ) -> (val : a) ->
-                { Val (DoSend p a k) ==> Val (k val) } Msg princ ()
+                { ProtoT (DoSend p a k) ==> ProtoT (k val) } Msg princ ()
      RecvFrom : (p : princ) ->
-                { Val (DoRecv p a k) ==> Val (k result) } Msg princ a
+                { ProtoT (DoRecv p a k) ==> ProtoT (k result) } Msg princ a
 
 instance Handler (Msg Ptr) IO where
-     handle (MkVal _) (SendTo p v) k = do sendToThread p v
-                                          k () (MkVal _)
-     handle (MkVal _) (RecvFrom p) k = do test <- checkMsgs
-                                          x <- getMsg
-                                          k x (MkVal _)
+     handle Proto (SendTo p v) k = do sendToThread p v
+                                      k () Proto
+     handle Proto (RecvFrom p) k = do test <- checkMsgs
+                                      x <- getMsg
+                                      k x Proto
 
 MSG : Type -> Actions -> EFFECT
-MSG t xs = MkEff (Val xs) (Msg t) 
+MSG t xs = MkEff (ProtoT xs) (Msg t) 
 
 sendTo : Handler (Msg p) m =>
          (x : p) -> (val : a) ->
