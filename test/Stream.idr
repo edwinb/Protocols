@@ -10,7 +10,6 @@ data Command = Next | Stop
 parameters (C : Ptr, S : Ptr)
 
   %assert_total -- Need this because we need to compute with it in a type!
-
   count : Protocol [C, S] ()
   count = do cmd <- C ==> S | Command
              case cmd of
