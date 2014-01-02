@@ -36,7 +36,7 @@ parameters (C : Ptr, S : Ptr)
                               return ()
 
 doCount : Ptr -> IO ()
-doCount me = do server <- fork (run [Proto, ()] (countServer me null 0))
+doCount me = do server <- fork (run [Proto] (countServer me null 0))
                 run [Proto, ()] (countClient null server)
 
 main : IO ()
