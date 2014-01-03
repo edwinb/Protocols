@@ -56,22 +56,24 @@ remove (y :: ys) (Later x) = y :: remove ys x
 -- The CONC effect
 ------------------------------------------------------------------
 
+data PID = MkPid Ptr
+
 data Conc : Effect where
-    Fork : Ptr -- ^ Parent VM
-           -> (Ptr -> IO ()) -- ^ Process, given parent VM
-           -> { () } Conc Ptr
+    Fork : PID -- ^ Parent VM
+           -> (PID -> IO ()) -- ^ Process, given parent VM
+           -> { () } Conc PID
 
 CONC : EFFECT
 CONC = MkEff () Conc
 
 -- Get VM here so it really is the parent VM not calculated in the
 -- child process!
-fork : (Ptr -> IO ()) -> { [CONC] } EffM IO Ptr
-fork proc = Fork prim__vm proc
+fork : (PID -> IO ()) -> { [CONC] } EffM IO PID
+fork proc = Fork (MkPid prim__vm) proc
 
 instance Handler Conc IO where
     handle () (Fork me proc) k = do pid <- fork (proc me)
-                                    k pid ()
+                                    k (MkPid pid) ()
 
 ------------------------------------------------------------------
 -- The MSG effect
@@ -100,18 +102,18 @@ using (cs : List (princ, chan))
              { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs } 
                Msg princ chan a
 
-instance Handler (Msg princ Ptr) IO where
+instance Handler (Msg princ PID) IO where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
 
   handle (Proto {cs}) (SendTo p v valid) k 
-         = do sendToThread (lookup cs valid) v
+         = do let (MkPid ptr) = lookup cs valid
+              sendToThread ptr v
               k () Proto
   handle (Proto {cs}) (RecvFrom p valid) k 
          = do test <- checkMsgs
               x <- getMsg
               k x Proto
-
 
 MSG : Type -> List (princ, chan) -> Actions -> EFFECT
 MSG {chan} princ ps xs = MkEff (ProtoT xs ps) (Msg princ chan) 

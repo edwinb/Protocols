@@ -62,8 +62,10 @@ Agent {princ} {chan} m s p ps es t
     = EffM m t (MSG princ ps (mkProcess p s (\x => End)) :: es)
                (\v => MSG princ ps End :: es)
 
+Process : {xs : List princ} ->
+           (Type -> Type) ->
+           Protocol xs () -> princ -> 
+           List (princ, PID) ->
+           List EFFECT -> Type -> Type
+Process m s p ps es t = Agent m s p ps es t
 
--- syntax Protocol [princ] [p] [c] [es] [t] =
---        EffM IO ((PROCESS princ (mkProcess c p (\x => End))) :: es)
---                (\v => (PROCESS princ End) :: es) t
-         
