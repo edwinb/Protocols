@@ -19,15 +19,14 @@ count = case !(Client ==> Server | Command) of
                         count
              Stop => Done
 
--- %logging 5
 countServer : Handler (Msg Type Ptr) IO => 
-              (client : Ptr) -> Int -> 
+              Int -> (client : Ptr) ->
               Agent IO count Server [Client := client] [] ()
-countServer client x 
-              = do t <- recvFrom' Client 
+countServer x client
+              = do t <- recvFrom Client 
                    case t of
-                        Next => do sendTo' Client x
-                                   countServer client (x + 1)
+                        Next => do sendTo Client x
+                                   countServer (x + 1) client
                         Stop => return ()
 
 countClient : Handler (Msg Type Ptr) IO => 
@@ -41,9 +40,11 @@ countClient server
                                countClient server
                     False => do sendTo Server Stop
 
-doCount : Ptr -> IO ()
-doCount me = do server <- fork (run [Proto] (countServer me 0))
-                run [Proto, ()] (countClient server)
+doCount : Agent {chan=Ptr} IO count Client [] [CONC, STDIO] ()
+doCount = do server <- fork (\parent => run [Proto] (countServer 0 parent))
+             setChan Server server
+             countClient server
+             dropChan Server
 
 main : IO ()
-main = doCount prim__vm
+main = run [Proto, (), ()] doCount

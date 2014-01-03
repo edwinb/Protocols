@@ -35,7 +35,13 @@ reflectValid : (P : Type) -> Tactic
 reflectValid (Valid a xs)
      = reflectListValid xs `Seq` Solve
 
-syntax IsValid = tactics { byReflection reflectValid; }
+-- syntax IsValid = tactics { byReflection reflectValid; }
+syntax IsValid = (| First,
+                    Later First,
+                    Later (Later First),
+                    Later (Later (Later First)),
+                    Later (Later (Later (Later First))),
+                    Later (Later (Later (Later (Later First)))) |)
 
 lookup : (xs : List (p, chan)) -> Valid x xs -> chan
 lookup ((x, c) :: ys) First = c
@@ -44,6 +50,32 @@ lookup (y :: ys) (Later x) = lookup ys x
 remove : (xs : List (p, chan)) -> Valid x xs -> List (p, chan)
 remove ((x, c) :: ys) First = ys
 remove (y :: ys) (Later x) = y :: remove ys x
+
+
+------------------------------------------------------------------
+-- The CONC effect
+------------------------------------------------------------------
+
+data Conc : Effect where
+    Fork : Ptr -- ^ Parent VM
+           -> (Ptr -> IO ()) -- ^ Process, given parent VM
+           -> { () } Conc Ptr
+
+CONC : EFFECT
+CONC = MkEff () Conc
+
+-- Get VM here so it really is the parent VM not calculated in the
+-- child process!
+fork : (Ptr -> IO ()) -> { [CONC] } EffM IO Ptr
+fork proc = Fork prim__vm proc
+
+instance Handler Conc IO where
+    handle () (Fork me proc) k = do pid <- fork (proc me)
+                                    k pid ()
+
+------------------------------------------------------------------
+-- The MSG effect
+------------------------------------------------------------------
 
 data ProtoT : a -> List (p, chan) -> Type where
      Proto : {x : a} -> {cs : List (p, chan)} -> ProtoT x cs
