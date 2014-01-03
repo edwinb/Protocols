@@ -14,7 +14,7 @@ reflectListElem : List a -> Tactic
 reflectListElem [] = Refine "Here" `Seq` Solve
 reflectListElem (x :: xs)
      = Try (Refine "Here" `Seq` Solve)
-           (Refine "There" `Seq` (Solve `Seq` reflectListEffElem xs))
+           (Refine "There" `Seq` (Solve `Seq` reflectListElem xs))
 -- TMP HACK! FIXME!
 -- The evaluator needs a 'function case' to know its a reflection function
 -- until we propagate that information! Without this, the _ case won't get

@@ -17,9 +17,25 @@ data Valid : p -> List (p, chan) -> Type where
 (:=) : p -> chan -> (p, chan)
 (:=) x c = (x, c)
 
--- TMP HACK!
-syntax IsValid = (| First, Later First, Later (Later First), 
-                    Later (Later (Later First)) |)
+%reflection
+reflectListValid : List (p, chan) -> Tactic
+reflectListValid [] = Refine "First" `Seq` Solve
+reflectListValid (x :: xs)
+     = Try (Refine "First" `Seq` Solve)
+           (Refine "Later" `Seq` (Solve `Seq` reflectListValid xs))
+-- TMP HACK! FIXME!
+-- The evaluator needs a 'function case' to know its a reflection function
+-- until we propagate that information! Without this, the _ case won't get
+-- matched. 
+reflectListValid (x ++ y) = Refine "First" `Seq` Solve
+reflectListValid _ = Refine "First" `Seq` Solve
+
+%reflection
+reflectValid : (P : Type) -> Tactic
+reflectValid (Valid a xs)
+     = reflectListValid xs `Seq` Solve
+
+syntax IsValid = tactics { byReflection reflectValid; }
 
 lookup : (xs : List (p, chan)) -> Valid x xs -> chan
 lookup ((x, c) :: ys) First = c
@@ -70,19 +86,21 @@ MSG {chan} princ ps xs = MkEff (ProtoT xs ps) (Msg princ chan)
 
 sendTo' : Handler (Msg p chan) m =>
           {cs : List (p, chan)} ->
-          (x : p) -> (prf : Valid x cs) ->     
+          (x : p) -> 
           (val : a) ->
+          {default IsValid prf : Valid x cs} ->     
+--           (prf : Valid x cs) ->
           { [MSG p cs (DoSend x a k)] ==> 
             [MSG p cs (k val)] } EffM m ()
-sendTo' proc prf v = SendTo proc v prf
+sendTo' proc v {prf} = SendTo proc v prf
 
 recvFrom' : Handler (Msg p chan) m =>
             {cs : List (p, chan)} ->
             (x : p) -> 
-            (prf : Valid x cs) ->
+            {default IsValid prf : Valid x cs} ->
             { [MSG p cs (DoRecv x a k)] ==> 
               [MSG p cs (k result)] } EffM m a
-recvFrom' proc prf = RecvFrom proc prf
+recvFrom' proc {prf} = RecvFrom proc prf
 
 -- TMP HACK until implicit argument/lift problem fixed...
 
