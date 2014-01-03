@@ -67,7 +67,8 @@ Process : {xs : List princ} ->
            Protocol xs () -> princ -> 
            List (princ, PID) ->
            List EFFECT -> Type -> Type
-Process m s p ps es t = Agent m s p ps es t
+Process m s p ps es t = Agent m s p ps (CONC :: es) t
 
-syntax spawn [p] [rs] = fork (\parent => run (Proto :: rs) (p parent))
+syntax spawn [p] [rs] = fork (\parent => run (Proto :: () :: rs) (p parent))
+syntax runConc [es] [p] = run (Proto :: () :: es) p
 

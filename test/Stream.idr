@@ -38,11 +38,11 @@ countClient server
                                countClient server
                     False => do sendTo Server Stop
 
-doCount : Process IO count Client [] [CONC, STDIO] ()
+doCount : Process IO count Client [] [STDIO] ()
 doCount = do server <- spawn (countServer 0) []
              setChan Server server
              countClient server
              dropChan Server
 
 main : IO ()
-main = run [Proto, (), ()] doCount
+main = runConc [()] doCount
