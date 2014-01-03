@@ -42,15 +42,6 @@ using (xs : List princ)
 
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
 
-  data SEnv : List princ -> Type where
-       Nil  : SEnv {princ} []
-       (::) : Maybe princ -> SEnv xs -> SEnv (x :: xs)
-
-  lookupEnv : {xs : List princ} ->
-              Elem x xs -> SEnv xs -> Maybe princ
-  lookupEnv Here (x :: xs) = x
-  lookupEnv (There p) (x :: xs) = lookupEnv p xs
-
   mkProcess : (x : princ) -> Protocol xs t -> (t -> Actions) -> Actions
   mkProcess x (Send' from to ty fp tp) k with (prim__syntactic_eq _ _ x from)
     mkProcess x (Send' from to ty fp tp) k | Nothing with (prim__syntactic_eq _ _ x to)
@@ -64,10 +55,12 @@ using (xs : List princ)
 
 Agent : {xs : List princ} ->
            (Type -> Type) ->
-           Protocol xs () -> princ -> List EFFECT -> Type -> Type
-Agent {princ} m s p es t
-    = EffM m t (MSG princ (mkProcess p s (\x => End)) :: es)
-               (\v => MSG princ End :: es)
+           Protocol xs () -> princ -> 
+           List (princ, chan) ->
+           List EFFECT -> Type -> Type
+Agent {princ} {chan} m s p ps es t
+    = EffM m t (MSG princ ps (mkProcess p s (\x => End)) :: es)
+               (\v => MSG princ ps End :: es)
 
 
 -- syntax Protocol [princ] [p] [c] [es] [t] =

@@ -19,12 +19,12 @@ parties `xs`, finally returning something of type `t`. The notation
 Implementations of the parties `A` and `B` can be achieved as follows:
 
 ```
-a : Agent IO aToB A [STDIO] ()
+a : Agent IO aToB A [B := bchan] [STDIO] ()
 a = do sendTo B "Hello"
        answer <- recvFrom B
        putStrLn (show answer)
 
-b : Agent IO aToB B [STDIO] ()
+b : Agent IO aToB B [A := achan] [STDIO] ()
 b = do str <- recvFrom A
        sendTo A (length str)
 ```
@@ -35,6 +35,10 @@ additional effects required (such as `STDIO` here) can also be listed.
 This means that a protocol implementation can also invoke other effects,
 manage state, etc, provided that the protocol operations themselves are
 carried out in the correct order, and to completion.
+
+The Agent type lets us specify which party of the protocol is being
+implemented, and list the handles which allow it to communicate with the
+other parties (e.g. `A := achan`, etc).
 
 Since `Protocol` is an embedded DSL, it follows that we can write more
 complex protocols where later interactions depend on the results of earlier
@@ -62,7 +66,8 @@ How communication is handled in practice is independent of the protocol DSL,
 and depends on an effect handler being implemented for a particular context.
 
 The library currently includes an effect handler which supports communication
-between concurrent processes. See `test/UtilServer` for a simple example.
+between concurrent processes. See `test/UtilServer` and `test/Stream` for 
+some simple examples.
 
 
 
