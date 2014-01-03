@@ -69,3 +69,5 @@ Process : {xs : List princ} ->
            List EFFECT -> Type -> Type
 Process m s p ps es t = Agent m s p ps es t
 
+syntax spawn [p] [rs] = fork (\parent => run (Proto :: rs) (p parent))
+
