@@ -3,6 +3,18 @@ module Effect.Msg
 import Effects
 import System.Concurrency.Raw
 
+------------------------------------------------------------------
+-- Marshaling values 
+------------------------------------------------------------------
+
+class Marshal val princ (m : Type -> Type) where
+    send : val -> princ -> m ()
+    receive : princ -> m val
+
+------------------------------------------------------------------
+-- Protocol actions (from perspective of one principal) 
+------------------------------------------------------------------
+
 data Actions : Type where
      DoSend : (dest : princ) -> (x : Type) -> (x -> Actions) -> Actions
      DoRecv : (src : princ) -> (x : Type) -> (x -> Actions) -> Actions
