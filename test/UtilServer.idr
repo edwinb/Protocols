@@ -32,8 +32,8 @@ util = do val <- Client ==> Server | Command
 -- Calculate the type relative to the server and implement something which
 -- follows the protocol, verified by the MSG effect
 
-runServer : (client : Ptr) ->
-            Agent IO util Server [Client := client] [STDIO] ()
+runServer : (client : PID) ->
+            Process IO util Server [Client := client] [STDIO] ()
 runServer client
           = do cmd <- recvFrom Client
                putStrLn "SERVER: Got command"
@@ -48,8 +48,8 @@ runServer client
 
 -- Ditto for a client 
 
-runClient : (server : Ptr) ->
-            Agent IO util Client [Server := server] [STDIO] ()
+runClient : (server : PID) ->
+            Process IO util Client [Server := server] [STDIO] ()
 runClient server
           = do putStr "Command: "
                x <- getStr
@@ -78,14 +78,16 @@ runClient server
 -- 'runServer' what the client/server VM pointers are (null as a placeholder 
 -- for itself)
 
-loop : Ptr -> IO ()
-loop me = do server <- fork (run [Proto, ()] (runServer me))
-             run [Proto, ()] (runClient server)
-             loop me
+runUtil : Process IO util Client [] [STDIO] ()
+runUtil = do server <- spawn runServer [()]
+             setChan Server server
+             runClient server
+             dropChan Server
 
 main : IO ()
-main = loop prim__vm
-
+main = forever $ runConc [()] runUtil 
+  where forever : IO () -> IO ()
+        forever t = do t; forever t
 
 
 

@@ -68,7 +68,7 @@ CONC = MkEff () Conc
 
 -- Get VM here so it really is the parent VM not calculated in the
 -- child process!
-fork : (PID -> IO ()) -> { [CONC] } EffM IO PID
+fork : (PID -> IO ()) -> { [CONC] } Eff IO PID
 fork proc = Fork (MkPid prim__vm) proc
 
 instance Handler Conc IO where
@@ -95,45 +95,52 @@ using (cs : List (princ, chan))
                      { ProtoT x cs ==> ProtoT x (remove cs v) }
                      Msg princ chan ()
 
-       SendTo   : (p : princ) -> (val : a) -> Valid p cs ->
+       SendTo   : -- Marshal a princ m =>
+                  (p : princ) -> (val : a) -> Valid p cs ->
              { ProtoT (DoSend p a k) cs ==> ProtoT (k val) cs } 
                Msg princ chan ()
-       RecvFrom : (p : princ) -> Valid p cs ->
+       RecvFrom : -- Marshal a princ m =>
+                  (p : princ) -> Valid p cs ->
              { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs } 
                Msg princ chan a
+
+instance Marshal a PID IO where
+  send val (MkPid ptr) = sendToThread ptr val
+  receive (MkPid ptr) = do x <- getMsg
+                           return x
 
 instance Handler (Msg princ PID) IO where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
 
   handle (Proto {cs}) (SendTo p v valid) k 
-         = do let (MkPid ptr) = lookup cs valid
-              sendToThread ptr v
+         = do let MkPid ptr = lookup cs valid
+              sendToThread ptr v 
               k () Proto
-  handle (Proto {cs}) (RecvFrom p valid) k 
-         = do test <- checkMsgs
+  handle (Proto {cs}) (RecvFrom {a} p valid) k 
+         = do -- test <- checkMsgs
               x <- getMsg
               k x Proto
 
 MSG : Type -> List (princ, chan) -> Actions -> EFFECT
 MSG {chan} princ ps xs = MkEff (ProtoT xs ps) (Msg princ chan) 
 
-sendTo' : Handler (Msg p chan) m =>
+sendTo' : (Marshal a p m, Handler (Msg p chan) m) =>
           {cs : List (p, chan)} ->
           (x : p) -> 
           (val : a) ->
           {default IsValid prf : Valid x cs} ->     
 --           (prf : Valid x cs) ->
           { [MSG p cs (DoSend x a k)] ==> 
-            [MSG p cs (k val)] } EffM m ()
+            [MSG p cs (k val)] } Eff m ()
 sendTo' proc v {prf} = SendTo proc v prf
 
-recvFrom' : Handler (Msg p chan) m =>
+recvFrom' : (Marshal a p m, Handler (Msg p chan) m) =>
             {cs : List (p, chan)} ->
             (x : p) -> 
             {default IsValid prf : Valid x cs} ->
             { [MSG p cs (DoRecv x a k)] ==> 
-              [MSG p cs (k result)] } EffM m a
+              [MSG p cs (k result)] } Eff m a
 recvFrom' proc {prf} = RecvFrom proc prf
 
 -- TMP HACK until implicit argument/lift problem fixed...
