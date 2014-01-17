@@ -137,28 +137,31 @@ instance Handler (Msg princ PID) IO where
 MSG : Type -> List (princ, chan) -> Actions -> EFFECT
 MSG {chan} princ ps xs = MkEff (ProtoT xs ps) (Msg princ chan) 
 
-sendTo' : (Marshal a p m, Handler (Msg p chan) m) =>
-          {cs : List (p, chan)} ->
-          (x : p) -> 
-          (val : a) ->
-          {default IsValid prf : Valid x cs} ->     
+sendTo : {cs : List (p, chan)} ->
+         (x : p) -> 
+         (val : a) ->
+         {default IsValid prf : Valid x cs} ->     
 --           (prf : Valid x cs) ->
-          { [MSG p cs (DoSend x a k)] ==> 
-            [MSG p cs (k val)] } Eff m ()
-sendTo' proc v {prf} = SendTo proc v prf
+         { [MSG p cs (DoSend x a k)] ==> 
+           [MSG p cs (k val)] } Eff m ()
+sendTo proc v {prf} = SendTo proc v prf
 
-recvFrom' : (Marshal a p m, Handler (Msg p chan) m) =>
-            {cs : List (p, chan)} ->
-            (x : p) -> 
-            {default IsValid prf : Valid x cs} ->
-            { [MSG p cs (DoRecv x a k)] ==> 
-              [MSG p cs (k result)] } Eff m a
-recvFrom' proc {prf} = RecvFrom proc prf
+recvFrom : {cs : List (p, chan)} ->
+           (x : p) -> 
+           {default IsValid prf : Valid x cs} ->
+           { [MSG p cs (DoRecv x a k)] ==> 
+             [MSG p cs (k result)] } Eff m a
+recvFrom proc {prf} = RecvFrom proc prf
 
--- TMP HACK until implicit argument/lift problem fixed...
+setChan : {cs : List (princ, chan)} -> 
+          (p : princ) -> (c : chan) ->
+          { [MSG princ cs xs] ==> 
+            [MSG princ ((p := c) :: cs) xs] } Eff m ()
+setChan p c = SetChannel p c
 
-syntax recvFrom [proc] = RecvFrom proc IsValid
-syntax sendTo [proc] [v] = SendTo proc v IsValid
-syntax setChan [princ] [chan] = SetChannel princ chan
-syntax dropChan [princ] = DropChannel princ IsValid
+dropChan : {cs : List (princ, chan)} -> 
+           (p : princ) -> {default IsValid v : Valid p cs} ->
+           { [MSG princ cs xs] ==> 
+             [MSG princ (remove cs v) xs] } Eff m ()
+dropChan p {v} = DropChannel p v
 
