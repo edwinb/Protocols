@@ -42,6 +42,7 @@ using (xs : List princ)
 
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
 
+  %reflection
   mkProcess : (x : princ) -> Protocol xs t -> (t -> Actions) -> Actions
   mkProcess x (Send' from to ty fp tp) k with (prim__syntactic_eq _ _ x from)
     mkProcess x (Send' from to ty fp tp) k | Nothing with (prim__syntactic_eq _ _ x to)

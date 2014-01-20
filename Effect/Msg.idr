@@ -100,21 +100,25 @@ data ProtoT : a -> List (p, chan) -> Type where
 using (cs : List (princ, chan))
 
   data Msg : Type -> Type -> Effect where
-       SetChannel : {x : a} -> (p : princ) -> (c : chan) ->
+       SetChannel : %erase x
+                    {x : a} -> (p : princ) -> (c : chan) ->
                     { ProtoT x cs ==> ProtoT x ((p := c) :: cs) }
-                    Msg princ chan ()
-       DropChannel : {x : a} -> (p : princ) -> (v : Valid p cs) ->
+                    Msg princ chan ()    
+       DropChannel : %erase x
+                     {x : a} -> (p : princ) -> (v : Valid p cs) ->
                      { ProtoT x cs ==> ProtoT x (remove cs v) }
-                     Msg princ chan ()
+                     Msg princ chan ()   
 
        SendTo   : -- Marshal a princ m =>
+                  %erase k
                   (p : princ) -> (val : a) -> Valid p cs ->
              { ProtoT (DoSend p a k) cs ==> ProtoT (k val) cs } 
-               Msg princ chan ()
+               Msg princ chan ()         
        RecvFrom : -- Marshal a princ m =>
+                  %erase k
                   (p : princ) -> Valid p cs ->
              { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs } 
-               Msg princ chan a
+               Msg princ chan a          
 
 instance Marshal a PID IO where
   send val (MkPid ptr) = sendToThread ptr val
@@ -127,12 +131,25 @@ instance Handler (Msg princ PID) IO where
 
   handle (Proto {cs}) (SendTo p v valid) k 
          = do let MkPid ptr = lookup cs valid
-              sendToThread ptr v 
+              sendToThread ptr (v, prim__vm)
               k () Proto
   handle (Proto {cs}) (RecvFrom {a} p valid) k 
          = do -- test <- checkMsgs
-              x <- getMsg
+              let MkPid ptr = lookup cs valid
+              x <- getMsgFrom ptr
               k x Proto
+    where 
+          -- if the sender is not the expected sender, try again then
+          -- put the message back in our queue.
+          getMsgFrom : Ptr -> IO t 
+          getMsgFrom {t} p = do (m, sender) <- getMsg {a = (t, Ptr)}
+                                q <- eqPtr p sender
+                                if q 
+                                   then return m
+                                   else do putStrLn "RETRY"
+                                           m' <- getMsgFrom p
+                                           sendToThread prim__vm (m, sender)
+                                           return m'
 
 MSG : Type -> List (princ, chan) -> Actions -> EFFECT
 MSG {chan} princ ps xs = MkEff (ProtoT xs ps) (Msg princ chan) 
