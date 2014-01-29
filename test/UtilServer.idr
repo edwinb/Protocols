@@ -24,9 +24,9 @@ util = do val <- Client ==> Server | Command
                Server ==> Client | String
                Done 
              Add => do 
-               Client ==> Server | Int
-               Client ==> Server | Int
-               Server ==> Client | Int
+               x <- Client ==> Server | Int
+               y <- Client ==> Server | Int
+               Server ==> Client | (z : Int ** z = x + y)
                Done
 
 -- Calculate the type relative to the server and implement something which
@@ -44,7 +44,7 @@ runServer client
                     Add => do x <- recvFrom Client
                               y <- recvFrom Client
                               putStrLn ("SERVER: Adding " ++ show (x, y))
-                              sendTo Client (x + y) 
+                              sendTo Client (x + y ** refl) 
 
 -- Ditto for a client 
 
@@ -62,7 +62,7 @@ runClient server
                               do sendTo Server Add
                                  sendTo Server x
                                  sendTo Server y
-                                 res <- recvFrom Server
+                                 (res ** _) <- recvFrom Server
                                  putStrLn ("CLIENT: Got " ++ show res)
   where parse : String -> Either String (Int, Int)
         parse xs = case words xs of
