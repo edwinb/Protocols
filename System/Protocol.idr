@@ -42,8 +42,7 @@ using (xs : List princ)
 
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
 
-  %reflection
-  mkProcess : (x : princ) -> Protocol xs t -> (t -> Actions) -> Actions
+  mkProcess : (x : princ) -> Protocol xs ty -> (ty -> Actions) -> Actions
   mkProcess x (Send' from to ty fp tp) k with (prim__syntactic_eq _ _ x from)
     mkProcess x (Send' from to ty fp tp) k | Nothing with (prim__syntactic_eq _ _ x to)
       mkProcess x (Send' from to ty fp tp) k | Nothing | Nothing = End
@@ -51,7 +50,7 @@ using (xs : List princ)
             = DoRecv from ty k
     mkProcess x (Send' x to ty fp tp) k | (Just refl) 
             = DoSend to ty k
-  mkProcess x (y >>= f) k = mkProcess x y (\t => mkProcess x (f t) k)
+  mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
   mkProcess x (pure y) k = End
 
 Agent : {xs : List princ} ->
