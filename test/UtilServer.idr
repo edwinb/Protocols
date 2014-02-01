@@ -2,6 +2,7 @@ module Main
 
 import Effects
 import Effect.StdIO
+import Effect.Default
 
 import System.Protocol
 
