@@ -40,6 +40,12 @@ using (xs : List princ)
   Done : Protocol xs ()
   Done = pure ()
 
+  Send : (from : princ) -> (to : princ) -> (a : Type) ->
+         {default IsElem pf : Elem from xs} ->
+         {default IsElem pt : Elem to xs} ->
+         Protocol xs a
+  Send from to {pf} {pt} = Send' from to pf pt
+
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
 
   mkProcess : (x : princ) -> Protocol xs ty -> (ty -> Actions) -> Actions

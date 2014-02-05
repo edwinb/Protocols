@@ -90,5 +90,3 @@ main = forever $ runConc [()] runUtil
   where forever : IO () -> IO ()
         forever t = do t; forever t
 
-
-
