@@ -2,12 +2,12 @@ module Effect.Msg
 
 import Effects
 import System.Concurrency.Raw
+import Network.Socket
+import Control.IOExcept
 
-class Marshal val chan transmit where
-      recvType : Type -> Type
-
-      marshal   : chan -> val -> transmit 
-      unmarshal : chan -> transmit -> recvType val
+class Marshal val chan (m : Type -> Type) where
+      marshalSend   : chan -> val -> m ()
+      unmarshalRecv : chan -> m val
 
 ------------------------------------------------------------------
 -- Protocol actions (from perspective of one principal) 
@@ -97,58 +97,59 @@ data ProtoT : a -> List (p, chan) -> Type where
 
 using (cs : List (princ, chan))
 
-  data Msg : Type -> Type -> Effect where
+  data Msg : Type -> Type -> (Type -> Type) -> Effect where
        SetChannel : %erase x
                     {x : a} -> (p : princ) -> (c : chan) ->
                     { ProtoT x cs ==> ProtoT x ((p := c) :: cs) }
-                    Msg princ chan ()    
+                    Msg princ chan m ()    
        DropChannel : %erase x
                      {x : a} -> (p : princ) -> (v : Valid p cs) ->
                      { ProtoT x cs ==> ProtoT x (remove cs v) }
-                     Msg princ chan ()   
+                     Msg princ chan m ()   
 
        SendTo   : %erase k
-                  Marshal a chan transmit =>
+                  Marshal a chan m =>
                   (p : princ) -> (val : a) -> Valid p cs ->
              { ProtoT (DoSend p a k) cs ==> ProtoT (k val) cs } 
-               Msg princ chan ()
+               Msg princ chan m ()
        RecvFrom : %erase k
-                  Marshal a chan transmit =>
+                  Marshal a chan m =>
                   (p : princ) -> Valid p cs ->
              { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs } 
-               Msg princ chan a
+               Msg princ chan m a
 
-MSG : Type -> List (princ, chan) -> Actions -> EFFECT
-MSG {chan} princ ps xs = MkEff (ProtoT xs ps) (Msg princ chan) 
+MSG : Type -> (Type -> Type) -> List (princ, chan) -> Actions -> EFFECT
+MSG {chan} princ m ps xs 
+    = MkEff (ProtoT xs ps) (Msg princ chan m) 
 
-sendTo : Marshal a chan transmit =>
+sendTo : Marshal a chan m =>
          {cs : List (p, chan)} ->
          (x : p) -> 
          (val : a) ->
          {default IsValid prf : Valid x cs} ->     
 --           (prf : Valid x cs) ->
-         { [MSG p cs (DoSend x a k)] ==> 
-           [MSG p cs (k val)] } Eff m ()
+         { [MSG p m cs (DoSend x a k)] ==> 
+           [MSG p m cs (k val)] } Eff m ()
 sendTo proc v {prf} = SendTo proc v prf
 
-recvFrom : Marshal a chan transmit =>
+recvFrom : Marshal a chan m =>
            {cs : List (p, chan)} ->
            (x : p) -> 
            {default IsValid prf : Valid x cs} ->
-           { [MSG p cs (DoRecv x a k)] ==> 
-             [MSG p cs (k result)] } Eff m a
+           { [MSG p m cs (DoRecv x a k)] ==> 
+             [MSG p m cs (k result)] } Eff m a
 recvFrom proc {prf} = RecvFrom proc prf
 
 setChan : {cs : List (princ, chan)} -> 
           (p : princ) -> (c : chan) ->
-          { [MSG princ cs xs] ==> 
-            [MSG princ ((p := c) :: cs) xs] } Eff m ()
+          { [MSG princ m cs xs] ==> 
+            [MSG princ m ((p := c) :: cs) xs] } Eff m ()
 setChan p c = SetChannel p c
 
 dropChan : {cs : List (princ, chan)} -> 
            (p : princ) -> {default IsValid v : Valid p cs} ->
-           { [MSG princ cs xs] ==> 
-             [MSG princ (remove cs v) xs] } Eff m ()
+           { [MSG princ m cs xs] ==> 
+             [MSG princ m (remove cs v) xs] } Eff m ()
 dropChan p {v} = DropChannel p v
 
 
@@ -156,37 +157,74 @@ dropChan p {v} = DropChannel p v
 -- Handlers for message passing concurrency
 -------------------------------------------------
 
--- Marshalling is easy - just send it! We don't even use this, but MSG
--- insists on its existence.
+instance Marshal a PID IO where
+    marshalSend (MkPid chan) x = sendToThread chan (x, prim__vm)
+    unmarshalRecv (MkPid chan) = getMsgFrom chan
+        where 
+          -- if the sender is not the expected sender, try again then
+          -- put the message back in our queue.
+          getMsgFrom : Ptr -> IO t 
+          getMsgFrom {t} p = do (m, sender) <- getMsg {a = (t, Ptr)}
+                                q <- eqPtr p sender
+                                if q then return m
+                                     else do putStrLn "RETRY"
+                                             m' <- getMsgFrom p
+                                             sendToThread prim__vm (m, sender)
+                                             return m'
+         
 
-instance Marshal a PID a where
-    recvType t = Maybe t
-
-    marshal _ x = x
-    unmarshal _ x = Just x
-
-instance Handler (Msg princ PID) IO where
+instance Handler (Msg princ PID IO) IO where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
 
   handle (Proto {cs}) (SendTo p v valid) k 
-         = do let MkPid ptr = lookup cs valid
-              sendToThread ptr (v, prim__vm)
+         = do let pid = lookup cs valid
+              marshalSend pid v
               k () Proto
   handle (Proto {cs}) (RecvFrom {a} p valid) k 
          = do -- test <- checkMsgs
-              let MkPid ptr = lookup cs valid
-              k !(getMsgFrom a ptr) Proto
-    where 
-          -- if the sender is not the expected sender, try again then
-          -- put the message back in our queue.
-          getMsgFrom : (t : Type) -> Ptr -> IO t 
-          getMsgFrom t p = do (m, sender) <- getMsg {a = (t, Ptr)}
-                              q <- eqPtr p sender
-                              if q then return m
-                                   else do putStrLn "RETRY"
-                                           m' <- getMsgFrom t p
-                                           sendToThread prim__vm (m, sender)
-                                           return m'
+              let pid = lookup cs valid
+              k !(unmarshalRecv pid) Proto
+
+------------------------------------------------------------
+-- Handlers for sending marshalled strings over a network 
+------------------------------------------------------------
+
+NetError : Type
+NetError = String
+
+class Netvalue a where
+  toNetString : a -> String
+  fromNetString : String -> Maybe a
+
+instance Netvalue a => Marshal a Socket (IOExcept String) where
+  marshalSend sock v 
+         = do res <- ioe_lift $ send sock (toNetString v)
+              case res of
+                   Left err => ioe_fail (show err)
+                   Right _ => return ()
+
+  unmarshalRecv sock
+         = do inval <- ioe_lift $ recv sock 4096 -- tmp hack!
+              case inval of
+                   Left err => ioe_fail (show err)
+                   Right (str, len) =>
+                        if (len == 0) then ioe_fail "Nothing received"
+                           else do case fromNetString {a} str of
+                                        Nothing => ioe_fail "Invalid data"
+                                        Just x => return x
+
+instance Monad m => Handler (Msg princ Socket m) m where
+  handle Proto (SetChannel p c) k = k () Proto
+  handle Proto (DropChannel p v) k = k () Proto
+
+  handle (Proto {cs}) (SendTo p v valid) k
+         = do let sock = lookup cs valid
+              marshalSend sock v
+              k () Proto
+
+  handle (Proto {cs}) (RecvFrom {a} p valid) k
+         = do let sock = lookup cs valid
+              k !(unmarshalRecv sock) Proto
 
 

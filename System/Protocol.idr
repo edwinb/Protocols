@@ -65,8 +65,8 @@ Agent : {xs : List princ} ->
            List (princ, chan) ->
            List EFFECT -> Type -> Type
 Agent {princ} {chan} m s p ps es t
-    = Eff m t (MSG princ ps (mkProcess p s (\x => End)) :: es)
-              (\v => MSG princ ps End :: es)
+    = Eff m t (MSG princ IO ps (mkProcess p s (\x => End)) :: es)
+              (\v => MSG princ IO ps End :: es)
 
 Process : {xs : List princ} ->
            (Type -> Type) ->
