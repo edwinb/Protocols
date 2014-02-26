@@ -14,9 +14,9 @@ class Marshal val chan (m : Type -> Type) where
 ------------------------------------------------------------------
 
 data Actions : Type where
-     DoSend : (dest : princ) -> (x : Type) -> (x -> Actions) -> Actions
-     DoRecv : (src : princ) -> (x : Type) -> (x -> Actions) -> Actions
-     End : Actions
+     DoSend  : (dest : princ) -> (x : Type) -> (x -> Actions) -> Actions
+     DoRecv  : (src : princ) -> (x : Type) -> (x -> Actions) -> Actions
+     End     : Actions
 
 data Valid : p -> List (p, chan) -> Type where
      First : {x : p} -> {xs : List (p, chan)} ->
@@ -69,8 +69,8 @@ remove (y :: ys) (Later x) = y :: remove ys x
 data PID = MkPid Ptr
 
 data Conc : Effect where
-    Fork : PID -- ^ Parent VM
-           -> (PID -> IO ()) -- ^ Process, given parent VM
+    Fork : PID -- Parent VM
+           -> (PID -> IO ()) -- Process, given parent VM
            -> { () } Conc PID
 
 CONC : EFFECT
@@ -228,3 +228,47 @@ instance Monad m => Handler (Msg princ Socket m) m where
               k !(unmarshalRecv sock) Proto
 
 
+------------------------------------------------------------
+-- Handlers for communicating with an external application 
+------------------------------------------------------------
+
+class IPCValue a where
+  toIPCString : a -> String
+  fromIPCString : String -> Maybe a
+
+fget : File -> IO String
+fget f = do fpoll f
+            fget' f
+  where fget' : File -> IO String
+        fget' h = case !(fgetc' h) of
+                       Nothing => return ""
+                       Just '\n' => return ""
+                       Just c => return (strCons c !(fget' h))
+
+instance IPCValue String where
+  toIPCString x = x
+  fromIPCString x = Just x
+
+instance IPCValue a => Marshal a File (IOExcept String) where
+  marshalSend f v = do ioe_lift $ fwrite f (toIPCString v)
+                       ioe_lift $ fflush f
+  unmarshalRecv f = do --                        x <- ioe_lift $ fpoll f
+                       if not True
+                         then ioe_fail "Nothing to receive"
+                         else do inval <- ioe_lift $ fread f
+                                 case fromIPCString {a} inval of
+                                    Nothing => ioe_fail "Invalid data"
+                                    Just x => return x
+
+instance Monad m => Handler (Msg princ File m) m where
+  handle Proto (SetChannel p c) k = k () Proto
+  handle Proto (DropChannel p c) k = k () Proto
+
+  handle (Proto {cs}) (SendTo p v valid) k
+         = do let f = lookup cs valid
+              marshalSend f v
+              k () Proto
+
+  handle (Proto {cs}) (RecvFrom {a} p valid) k
+         = do let f = lookup cs valid
+              k !(unmarshalRecv f) Proto

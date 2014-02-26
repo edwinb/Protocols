@@ -32,10 +32,10 @@ syntax IsElem = tactics { byReflection reflectElem; }
 
 using (xs : List princ)
   data Protocol : List princ -> Type -> Type where
-       Send' : (from : princ) -> (to : princ) -> (a : Type) ->
-               Elem from xs   -> Elem to xs -> Protocol xs a
-       (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
-       pure  : a -> Protocol xs a
+       Send'  : (from : princ) -> (to : princ) -> (a : Type) ->
+                Elem from xs   -> Elem to xs -> Protocol xs a
+       (>>=)  : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
+       pure   : a -> Protocol xs a
 
   Done : Protocol xs ()
   Done = pure ()
@@ -65,8 +65,8 @@ Agent : {xs : List princ} ->
            List (princ, chan) ->
            List EFFECT -> Type -> Type
 Agent {princ} {chan} m s p ps es t
-    = Eff m t (MSG princ IO ps (mkProcess p s (\x => End)) :: es)
-              (\v => MSG princ IO ps End :: es)
+    = Eff m t (MSG princ m ps (mkProcess p s (\x => End)) :: es)
+              (\v => MSG princ m ps End :: es)
 
 Process : {xs : List princ} ->
            (Type -> Type) ->
@@ -74,6 +74,12 @@ Process : {xs : List princ} ->
            List (princ, PID) ->
            List EFFECT -> Type -> Type
 Process m s p ps es t = Agent m s p ps (CONC :: es) t
+
+IPC : {xs : List princ} ->
+      Protocol xs () -> princ -> 
+      List (princ, File) ->
+      List EFFECT -> Type -> Type
+IPC s p ps es t = Agent (IOExcept String) s p ps es t
 
 syntax spawn [p] [rs] = fork (\parent => runInit (Proto :: () :: rs) (p parent))
 syntax runConc [es] [p] = runInit (Proto :: () :: es) p

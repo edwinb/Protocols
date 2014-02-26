@@ -5,9 +5,7 @@ import Effect.StdIO
 
 import System.Protocol
 
-data Command = Next | Stop
-
--- parameters (C : a, S : a)
+data Command = Next | Stop 
 
 %assert_total -- Need this because we need to compute with it in a type!
 count : Protocol ['Client, 'Server] ()
@@ -20,8 +18,7 @@ count = do cmd <- 'Client ==> 'Server | Command
 countServer : (v : Int) -> (client : PID) ->
               Process IO count 'Server ['Client := client] [] ()
 countServer v client
-              = with Effects, Msg do 
-                   cmd <- recvFrom 'Client 
+              = do cmd <- recvFrom 'Client 
                    case cmd of
                         Next => do sendTo 'Client (v * 2)
                                    countServer (v + 1) client
@@ -29,11 +26,11 @@ countServer v client
 
 countClient : (server : PID) ->
               Process IO count 'Client ['Server := server] [STDIO] ()
-countClient server = with Effects do
-                 foom <- putStr "More? ('n' to stop) "
+countClient server = do
+                 putStr "More? ('n' to stop) "
                  x <- getStr
                  case (trim x /= "n") of
-                    True => do blarg <- sendTo 'Server Next
+                    True => do sendTo 'Server Next
                                ans <- recvFrom 'Server 
                                putStrLn (show ans)
                                countClient server
