@@ -1,5 +1,5 @@
 package protocols
 
-opts = "-p neweffects"
+opts = "-p effects"
 modules = Effect.Msg, System.Protocol
           
