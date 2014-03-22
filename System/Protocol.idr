@@ -35,6 +35,7 @@ using (xs : List princ)
        Send'  : (from : princ) -> (to : princ) -> (a : Type) ->
                 Elem from xs   -> Elem to xs -> Protocol xs a
        (>>=)  : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
+       Rec    : Inf (Protocol xs a) -> Protocol xs a
        pure   : a -> Protocol xs a
 
   Done : Protocol xs ()
@@ -57,6 +58,7 @@ using (xs : List princ)
     mkProcess x (Send' x to ty fp tp) k | (Just refl) 
             = DoSend to ty k
   mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
+  mkProcess x (Rec p) k = mkProcess x p k
   mkProcess x (pure y) k = End
 
 Agent : {xs : List princ} ->

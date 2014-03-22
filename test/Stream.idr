@@ -7,12 +7,11 @@ import System.Protocol
 
 data Command = Next | Stop 
 
-%assert_total -- Need this because we need to compute with it in a type!
 count : Protocol ['Client, 'Server] ()
 count = do cmd <- 'Client ==> 'Server | Command 
            case cmd of
               Next => do foo <- 'Server ==> 'Client | Int 
-                         count 
+                         Rec count 
               Stop => Done
 
 countServer : (v : Int) -> (client : PID) ->

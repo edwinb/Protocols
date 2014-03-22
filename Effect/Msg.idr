@@ -92,9 +92,6 @@ instance Handler Conc IO where
 data ProtoT : a -> List (p, chan) -> Type where
      Proto : {x : a} -> {cs : List (p, chan)} -> ProtoT x cs
 
--- Idea: parameterise by labels and channel type, allow setting channels,
--- can only send/receive on a known channel.
-
 using (cs : List (princ, chan))
 
   data Msg : Type -> Type -> (Type -> Type) -> Effect where
@@ -127,7 +124,6 @@ sendTo : Marshal a chan m =>
          (x : p) -> 
          (val : a) ->
          {default IsValid prf : Valid x cs} ->     
---           (prf : Valid x cs) ->
          { [MSG p m cs (DoSend x a k)] ==> 
            [MSG p m cs (k val)] } Eff m ()
 sendTo proc v {prf} = SendTo proc v prf
