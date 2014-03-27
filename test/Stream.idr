@@ -17,10 +17,10 @@ count = do cmd <- 'Client ==> 'Server | Command
 countServer : (v : Int) -> (client : PID) ->
               Process IO count 'Server ['Client := client] [] ()
 countServer v client
-              = do cmd <- recvFrom 'Client 
+              = do cmd <- recvFrom 'Client
                    case cmd of
                         Next => do sendTo 'Client (v * 2)
-                                   countServer (v + 1) client
+                                   rec (countServer (v + 1) client)
                         Stop => return ()
 
 countClient : (server : PID) ->
@@ -32,7 +32,7 @@ countClient server = do
                     True => do sendTo 'Server Next
                                ans <- recvFrom 'Server 
                                putStrLn (show ans)
-                               countClient server
+                               rec (countClient server)
                     False => do sendTo 'Server Stop
 
 doCount : Process IO count 'Client [] [STDIO] ()
@@ -43,4 +43,3 @@ doCount = do server <- spawn (countServer 0) []
 
 main : IO ()
 main = runConc [()] doCount
-

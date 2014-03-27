@@ -16,6 +16,7 @@ class Marshal val chan (m : Type -> Type) where
 data Actions : Type where
      DoSend  : (dest : princ) -> (x : Type) -> (x -> Actions) -> Actions
      DoRecv  : (src : princ) -> (x : Type) -> (x -> Actions) -> Actions
+     DoRec   : Inf Actions -> Actions
      End     : Actions
 
 data Valid : p -> List (p, chan) -> Type where
@@ -115,6 +116,10 @@ using (cs : List (princ, chan))
              { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs } 
                Msg princ chan m a
 
+       Cont : %erase k
+              { ProtoT (DoRec k) cs ==> ProtoT k cs }
+              Msg princ chan m ()
+
 MSG : Type -> (Type -> Type) -> List (princ, chan) -> Actions -> EFFECT
 MSG {chan} princ m ps xs 
     = MkEff (ProtoT xs ps) (Msg princ chan m) 
@@ -148,6 +153,12 @@ dropChan : {cs : List (princ, chan)} ->
              [MSG princ m (remove cs v) xs] } Eff m ()
 dropChan p {v} = DropChannel p v
 
+continue : {cs : List (princ, chan)} ->
+        { [MSG princ m cs (DoRec k)] ==> [MSG princ m cs k] } Eff m ()
+continue = Cont
+
+syntax rec [x] = continue >>= (\_ => x)
+
 
 -------------------------------------------------
 -- Handlers for message passing concurrency
@@ -172,6 +183,7 @@ instance Marshal a PID IO where
 instance Handler (Msg princ PID IO) IO where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
+  handle Proto Cont k = k () Proto
 
   handle (Proto {cs}) (SendTo p v valid) k 
          = do let pid = lookup cs valid
@@ -213,6 +225,7 @@ instance Netvalue a => Marshal a Socket (IOExcept String) where
 instance Monad m => Handler (Msg princ Socket m) m where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
+  handle Proto Cont k = k () Proto
 
   handle (Proto {cs}) (SendTo p v valid) k
          = do let sock = lookup cs valid

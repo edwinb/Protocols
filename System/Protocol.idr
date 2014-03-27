@@ -4,6 +4,8 @@ import Effects
 import Effect.StdIO
 import Effect.Msg
 
+%access public
+
 using (xs : List a)
   data Elem : a -> List a -> Type where
        Here  : Elem x (x :: xs)
@@ -49,6 +51,7 @@ using (xs : List princ)
 
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
 
+  total
   mkProcess : (x : princ) -> Protocol xs ty -> (ty -> Actions) -> Actions
   mkProcess x (Send' from to ty fp tp) k with (prim__syntactic_eq _ _ x from)
     mkProcess x (Send' from to ty fp tp) k | Nothing with (prim__syntactic_eq _ _ x to)
@@ -58,7 +61,7 @@ using (xs : List princ)
     mkProcess x (Send' x to ty fp tp) k | (Just refl) 
             = DoSend to ty k
   mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
-  mkProcess x (Rec p) k = mkProcess x p k
+  mkProcess x (Rec p) k = DoRec (mkProcess x p k)
   mkProcess x (pure y) k = End
 
 Agent : {xs : List princ} ->
