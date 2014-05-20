@@ -1,3 +1,6 @@
+-- ------------------------------------------------------------ [ Protocol.idr ]
+-- An effectful implementation of protocols.
+-- --------------------------------------------------------------------- [ EOH ]
 module System.Protocol
 
 import Effects
@@ -31,24 +34,41 @@ reflectElem (Elem a xs)
 
 syntax IsElem = tactics { byReflection reflectElem; }
 
+-- ----------------------------------------------------- [ Protocol Definition ]
 
 using (xs : List princ)
+  ||| Definition of protocol actions. 
   data Protocol : List princ -> Type -> Type where
-       Send'  : (from : princ) -> (to : princ) -> (a : Type) ->
-                Elem from xs   -> Elem to xs -> Protocol xs a
-       (>>=)  : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
-       Rec    : Inf (Protocol xs a) -> Protocol xs a
-       pure   : a -> Protocol xs a
+       ||| Send data from one principal to another.
+       |||
+       ||| @from The message originator.
+       ||| @to   The message recipient.
+       ||| @a    The type of the message to be sent.
+       Send' : (from : princ) -> (to : princ) -> (a : Type) ->
+                Elem from xs -> Elem to xs -> Protocol xs a
+       
+       ||| Implementation of Do notation for protocols.
+       (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
 
+       Rec : Inf (Protocol xs a) -> Protocol xs a       
+       pure : a -> Protocol xs a
+
+  ||| Signify the end of a protocol.
   Done : Protocol xs ()
   Done = pure ()
 
+  ||| Send data from one principal to another.
+  |||
+  ||| @from The message originator.
+  ||| @to   The message recipient.
+  ||| @a    The type of the message to be sent.       
   Send : (from : princ) -> (to : princ) -> (a : Type) ->
          {default IsElem pf : Elem from xs} ->
          {default IsElem pt : Elem to xs} ->
          Protocol xs a
   Send from to {pf} {pt} = Send' from to pf pt
 
+  -- Syntactic Sugar for specifying protocols.
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
 
   total
@@ -64,6 +84,9 @@ using (xs : List princ)
   mkProcess x (Rec p) k = DoRec (mkProcess x p k)
   mkProcess x (pure y) k = End
 
+-- ------------------------------------------------------- [ Protocol Contexts ]
+
+||| Definition of effectul protocols for the network context.
 Agent : {xs : List princ} ->
            (Type -> Type) ->
            Protocol xs () -> princ -> 
@@ -73,6 +96,7 @@ Agent {princ} {chan} m s p ps es t
     = Eff m t (MSG princ m ps (mkProcess p s (\x => End)) :: es)
               (\v => MSG princ m ps End :: es)
 
+||| Definition of effectful protocols for concurrent processes.
 Process : {xs : List princ} ->
            (Type -> Type) ->
            Protocol xs () -> princ -> 
@@ -80,12 +104,17 @@ Process : {xs : List princ} ->
            List EFFECT -> Type -> Type
 Process m s p ps es t = Agent m s p ps (CONC :: es) t
 
+||| Definition of effectful protocols for interprocess communication.
 IPC : {xs : List princ} ->
       Protocol xs () -> princ -> 
       List (princ, File) ->
       List EFFECT -> Type -> Type
 IPC s p ps es t = Agent (IOExcept String) s p ps es t
 
+-- ------------------------------------------------------ [ Syntax Definitions ]
+
+-- Helper syntax for spawning processes and running concurrent process.
+
 syntax spawn [p] [rs] = fork (\parent => runInit (Proto :: () :: rs) (p parent))
 syntax runConc [es] [p] = runInit (Proto :: () :: es) p
-
+-- --------------------------------------------------------------------- [ EOF ]
