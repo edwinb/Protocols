@@ -8,8 +8,11 @@ import System.Concurrency.Raw
 import Network.Socket
 import Control.IOExcept
 
+||| Detail how to serialise data for a particular communication channel.
 class Marshal val chan (m : Type -> Type) where
+      ||| Marshal a value and then send using the communication channel.
       marshalSend   : chan -> val -> m ()
+      ||| Receive a value from the communication channel and unmarhsal it.
       unmarshalRecv : chan -> m val
 
 -- ------------------------------------------------------------------------------
@@ -149,9 +152,8 @@ using (cs : List (princ, chan))
 
 -- ----------------------------------------------- [ MSG Effect Implementation ]
 ||| Definition of the message effect.
-MSG : Type -> (Type -> Type) -> List (princ, chan) -> Actions
-    -> EFFECT MSG {chan} princ m ps xs 
-    = MkEff (ProtoT xs ps) (Msg princ chan m) 
+MSG : Type -> (Type -> Type) -> List (princ, chan) -> Actions -> EFFECT
+MSG {chan} princ m ps xs = MkEff (ProtoT xs ps) (Msg princ chan m) 
 
 ||| Send a message to a principle.
 |||
@@ -213,7 +215,7 @@ syntax rec [x] = continue >>= (\_ => x)
 -- Handlers for message passing concurrency
 
 
-||| Generic marshelling commands for sending data between threads.
+--- Generic marshalling commands for sending data between threads.
 instance Marshal a PID IO where
     marshalSend (MkPid chan) x = sendToThread chan (x, prim__vm)
     unmarshalRecv (MkPid chan) = getMsgFrom chan
@@ -229,7 +231,7 @@ instance Marshal a PID IO where
                                              sendToThread prim__vm (m, sender)
                                              return m'
          
-||| Perform the marshalling in relation to the protocol specification.
+--- Perform the marshalling in relation to the protocol specification.
 instance Handler (Msg princ PID IO) IO where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
@@ -257,16 +259,14 @@ class Netvalue a where
   ||| Deserialise a String representation into data.
   fromNetString : String -> Maybe a
 
-||| Generic marshelling commands for data in the Network Context.
+-- Generic marshelling commands for data in the Network Context.
 instance Netvalue a => Marshal a Socket (IOExcept String) where
-  ||| Send data.
   marshalSend sock v 
          = do res <- ioe_lift $ send sock (toNetString v)
               case res of
                    Left err => ioe_fail (show err)
                    Right _ => return ()
 
-  ||| Receive data.
   unmarshalRecv sock
          = do inval <- ioe_lift $ recv sock 4096 -- tmp hack!
               case inval of
@@ -277,7 +277,7 @@ instance Netvalue a => Marshal a Socket (IOExcept String) where
                                         Nothing => ioe_fail "Invalid data"
                                         Just x => return x
 
-||| Perform the marshalling in relation to the protocol specification.
+-- Perform the marshalling in relation to the protocol specification.
 instance Monad m => Handler (Msg princ Socket m) m where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
@@ -312,17 +312,16 @@ fget f = do fpoll f
                        Just '\n' => return ""
                        Just c => return (strCons c !(fget' h))
 
-||| Serialisation commands for `String` types
+-- Serialisation commands for `String` types
 instance IPCValue String where
   toIPCString x   = x
   fromIPCString x = Just x
 
-||| Generic marshalling commands for data in the IPC context.
+-- Generic marshalling commands for data in the IPC context.
 instance IPCValue a => Marshal a File (IOExcept String) where
-  ||| Write data to file
   marshalSend f v = do ioe_lift $ fwrite f (toIPCString v)
                        ioe_lift $ fflush f
-  ||| Receive data from a file
+                       
   unmarshalRecv f = do --                        x <- ioe_lift $ fpoll f
                        if not True
                          then ioe_fail "Nothing to receive"
@@ -331,7 +330,7 @@ instance IPCValue a => Marshal a File (IOExcept String) where
                                     Nothing => ioe_fail "Invalid data"
                                     Just x => return x
 
-||| Perform the marshalling in relation to the protocol specification.
+-- Perform the marshalling in relation to the protocol specification.
 instance Monad m => Handler (Msg princ File m) m where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p c) k = k () Proto
