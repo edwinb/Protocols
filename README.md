@@ -6,27 +6,27 @@ For example, given two parties 'A' and 'B', a protocol in which 'A' sends
 a String to 'B' and receives an integer back could be described as follows:
 
 ```
-aToB : Protocol [A, B] ()
-aToB = do A ==> B | String
-          B ==> A | Int
+aToB : Protocol ['A, 'B] ()
+aToB = do 'A ==> 'B | String
+          'B ==> 'A | Int
           Done
 ```
 
 The type `Protocol xs t` describes a communication protocol between the 
 parties `xs`, finally returning something of type `t`. The notation
-`A ==> B | t` means that party `A` sends a value of type `t` to party B.
+`'A ==> 'B | t` means that party `A` sends a value of type `t` to party B.
 
 Implementations of the parties `A` and `B` can be achieved as follows:
 
 ```
-a : Agent IO aToB A [B := bchan] [STDIO] ()
-a = do sendTo B "Hello"
-       answer <- recvFrom B
+a : Agent IO aToB 'A ['B := bchan] [STDIO] ()
+a = do sendTo 'B "Hello"
+       answer <- recvFrom 'B
        putStrLn (show answer)
 
-b : Agent IO aToB B [A := achan] [STDIO] ()
-b = do str <- recvFrom A
-       sendTo A (length str)
+b : Agent IO aToB 'B ['A := achan] [STDIO] ()
+b = do str <- recvFrom 'A
+       sendTo 'A (length str)
 ```
 
 These are programs in the 'Effects' DSL. It is a type error if either
@@ -38,7 +38,7 @@ carried out in the correct order, and to completion.
 
 The Agent type lets us specify which party of the protocol is being
 implemented, and list the handles which allow it to communicate with the
-other parties (e.g. `A := achan`, etc).
+other parties (e.g. `'A := achan`, etc).
 
 Since `Protocol` is an embedded DSL, it follows that we can write more
 complex protocols where later interactions depend on the results of earlier
@@ -47,19 +47,19 @@ interactions. For example:
 ```
 data Command = Add | Multiply | Negate
 
-mathsServer : Protocol [Client, Server] ()
-mathsServer = do cmd <- Client ==> Server | Command
+mathsServer : Protocol ['Client, 'Server] ()
+mathsServer = do cmd <- 'Client ==> 'Server | Command
                  case cmd of
-                      Add => do Client ==> Server | (Int, Int)
-                                Server ==> Client | Int
+                      Add => do 'Client ==> 'Server | (Int, Int)
+                                'Server ==> 'Client | Int
                                 Done
                       Multiply => 
-                             do Client ==> Server | (Int, Int)
-                                Server ==> Client | Int
+                             do 'Client ==> 'Server | (Int, Int)
+                                'Server ==> 'Client | Int
                                 Done
                       Negate =>
-                             do Client ==> Server | Int
-                                Server ==> Client | Int
+                             do 'Client ==> 'Server | Int
+                                'Server ==> 'Client | Int
 ```
 
 How communication is handled in practice is independent of the protocol DSL,

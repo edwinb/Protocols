@@ -37,22 +37,38 @@ syntax IsElem = tactics { byReflection reflectElem; }
 -- ----------------------------------------------------- [ Protocol Definition ]
 
 using (xs : List princ)
+  ||| Definition of protocol actions. 
   data Protocol : List princ -> Type -> Type where
-       Send'  : (from : princ) -> (to : princ) -> (a : Type) ->
-                Elem from xs   -> Elem to xs -> Protocol xs a
-       (>>=)  : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
-       Rec    : Inf (Protocol xs a) -> Protocol xs a
-       pure   : a -> Protocol xs a
+       ||| Send data from one principal to another.
+       |||
+       ||| @from The message originator.
+       ||| @to   The message recipient.
+       ||| @a    The type of the message to be sent.
+       Send' : (from : princ) -> (to : princ) -> (a : Type) ->
+                Elem from xs -> Elem to xs -> Protocol xs a
+       
+       ||| Implementation of Do notation for protocols.
+       (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
 
+       Rec : Inf (Protocol xs a) -> Protocol xs a       
+       pure : a -> Protocol xs a
+
+  ||| Signify the end of a protocol.
   Done : Protocol xs ()
   Done = pure ()
 
+  ||| Send data from one principal to another.
+  |||
+  ||| @from The message originator.
+  ||| @to   The message recipient.
+  ||| @a    The type of the message to be sent.       
   Send : (from : princ) -> (to : princ) -> (a : Type) ->
          {default IsElem pf : Elem from xs} ->
          {default IsElem pt : Elem to xs} ->
          Protocol xs a
   Send from to {pf} {pt} = Send' from to pf pt
 
+  -- Syntactic Sugar for specifying protocols.
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
 
   total
