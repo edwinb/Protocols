@@ -32,7 +32,7 @@ reflectElem : (P : Type) -> Tactic
 reflectElem (Elem a xs)
      = reflectListElem xs `Seq` Solve
 
-syntax IsElem = tactics { byReflection reflectElem; }
+syntax IsElem = tactics { search 100; }
 
 -- ----------------------------------------------------- [ Protocol Definition ]
 
