@@ -8,9 +8,6 @@ import System.Protocol
 
 data Command = Reverse | Add 
 
-data Client : Type where
-data Server : Type where
-
 -- Describe a client/server protocol, to be run concurrently
 -- A ==> B | t    ... means "A sends a value of type t to B"
 
@@ -39,7 +36,7 @@ runServer client
           = do cmd <- recvFrom 'Client
                putStrLn "SERVER: Got command"
                case cmd of
-                    Reverse => do str <- recvFrom 'Client
+                    Reverse => do str <- lift' (recvFrom 'Client)
                                   putStrLn ("SERVER: Reversing " ++ str)
                                   sendTo 'Client (reverse str)
                     Add => do x <- recvFrom 'Client
@@ -89,4 +86,3 @@ main : IO ()
 main = forever $ runConc [()] runUtil 
   where forever : IO () -> IO ()
         forever t = do t; forever t
-

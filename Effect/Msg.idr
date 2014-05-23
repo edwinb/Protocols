@@ -27,9 +27,9 @@ data Actions : Type where
      End     : Actions
 
 data Valid : p -> List (p, chan) -> Type where
-     First : {x : p} -> {xs : List (p, chan)} ->
+     First : .{x : p} -> .{xs : List (p, chan)} -> {c : chan} ->
              Valid x ((x, c) :: xs)
-     Later : {x : p} -> {xs : List (p, chan)} ->
+     Later : .{x : p} -> .{xs : List (p, chan)} ->
              Valid x xs -> Valid x (y :: xs)
 
 (:=) : p -> chan -> (p, chan)
@@ -132,7 +132,7 @@ using (cs : List (princ, chan))
        SendTo : %erase k
                 Marshal a chan m =>
                   (p : princ) -> (val : a) -> (v : Valid p cs) ->
-             { ProtoT (DoSend p a k) cs ==> ProtoT (k val) cs } 
+             { ProtoT (DoSend p a k') cs ==> ProtoT (k' val) cs } 
                Msg princ chan m ()
                
        ||| Receive a message from a principle in the protocol.
@@ -164,8 +164,8 @@ sendTo : Marshal a chan m =>
          (x : p) -> 
          (val : a) ->
          {default IsValid prf : Valid x cs} ->     
-         { [MSG p m cs (DoSend x a k)] ==> 
-           [MSG p m cs (k val)] } Eff m ()
+         { [MSG p m cs (DoSend x a k')] ==> 
+           [MSG p m cs (k' val)] } Eff m ()
 sendTo proc v {prf} = SendTo proc v prf
 
 ||| Receive a message from a principle.
@@ -334,6 +334,7 @@ instance IPCValue a => Marshal a File (IOExcept String) where
 instance Monad m => Handler (Msg princ File m) m where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p c) k = k () Proto
+  handle Proto Cont k = k () Proto
 
   handle (Proto {cs}) (SendTo p v valid) k
          = do let f = lookup cs valid
