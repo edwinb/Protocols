@@ -87,7 +87,7 @@ CONC = MkEff () Conc
 -- Get VM here so it really is the parent VM not calculated in the
 -- child process!
 fork : (PID -> IO ()) -> { [CONC] } Eff IO PID
-fork proc = Fork (MkPid prim__vm) proc
+fork proc = effect $ Fork (MkPid prim__vm) proc
 
 instance Handler Conc IO where
     handle () (Fork me proc) k = do pid <- fork (proc me)
@@ -166,7 +166,7 @@ sendTo : Marshal a chan m =>
          {default IsValid prf : Valid x cs} ->     
          { [MSG p m cs (DoSend x a k')] ==> 
            [MSG p m cs (k' val)] } Eff m ()
-sendTo proc v {prf} = SendTo proc v prf
+sendTo proc v {prf} = effect $ SendTo proc v prf
 
 ||| Receive a message from a principle.
 |||
@@ -177,7 +177,7 @@ recvFrom : Marshal a chan m =>
          -> {default IsValid prf : Valid x cs}
          -> { [MSG p m cs (DoRecv x a k)] ==> 
               [MSG p m cs (k result)] } Eff m a
-recvFrom proc {prf} = RecvFrom proc prf
+recvFrom proc {prf} = effect $ RecvFrom proc prf
 
 ||| Bind the protocol implementation with the associated communication channel.
 |||
@@ -188,7 +188,7 @@ setChan : {cs : List (princ, chan)}
         -> (c : chan)
         -> { [MSG princ m cs xs] ==> 
              [MSG princ m ((p := c) :: cs) xs] } Eff m ()
-setChan p c = SetChannel p c
+setChan p c = effect $ SetChannel p c
 
 ||| Free the protocol implementation from the associated communication channel.
 |||
@@ -198,12 +198,12 @@ dropChan : {cs : List (princ, chan)}
          -> {default IsValid v : Valid p cs}
          -> { [MSG princ m cs xs] ==> 
               [MSG princ m (remove cs v) xs] } Eff m ()
-dropChan p {v} = DropChannel p v
+dropChan p {v} = effect $ DropChannel p v
 
 ||| Continue executing the protocol.
 continue : {cs : List (princ, chan)} ->
         { [MSG princ m cs (DoRec k)] ==> [MSG princ m cs k] } Eff m ()
-continue = Cont
+continue = effect $ Cont
 
 syntax rec [x] = continue >>= (\_ => x)
 
@@ -344,6 +344,5 @@ instance Monad m => Handler (Msg princ File m) m where
   handle (Proto {cs}) (RecvFrom {a} p valid) k
          = do let f = lookup cs valid
               k !(unmarshalRecv f) Proto
-
 
 -- --------------------------------------------------------------------- [ EOF ]
