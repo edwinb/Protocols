@@ -16,10 +16,10 @@ class Marshal val chan (m : Type -> Type) where
       unmarshalRecv : chan -> m val
 
 -- ------------------------------------------------------------------------------
--- Protocol actions (from perspective of one principal) 
+-- Protocol actions (from perspective of one principal)
 -- ------------------------------------------------------------------------------
 
-||| Protocol actions (from perspective of one principal) 
+||| Protocol actions (from perspective of one principal)
 data Actions : Type where
      DoSend  : (dest : princ) -> (x : Type) -> (x -> Actions) -> Actions
      DoRecv  : (src : princ) -> (x : Type) -> (x -> Actions) -> Actions
@@ -44,7 +44,7 @@ reflectListValid (x :: xs)
 -- TMP HACK! FIXME!
 -- The evaluator needs a 'function case' to know its a reflection function
 -- until we propagate that information! Without this, the _ case won't get
--- matched. 
+-- matched.
 reflectListValid (x ++ y) = Refine "First" `Seq` Solve
 reflectListValid _ = Refine "First" `Seq` Solve
 
@@ -87,7 +87,7 @@ CONC = MkEff () Conc
 -- Get VM here so it really is the parent VM not calculated in the
 -- child process!
 fork : (PID -> IO ()) -> { [CONC] } Eff IO PID
-fork proc = effect $ Fork (MkPid prim__vm) proc
+fork proc = call $ Fork (MkPid prim__vm) proc
 
 instance Handler Conc IO where
     handle () (Fork me proc) k = do pid <- fork (proc me)
@@ -114,15 +114,15 @@ using (cs : List (princ, chan))
                     {x : a} -> (p : princ) -> (c : chan) ->
                     { ProtoT x cs ==> ProtoT x ((p := c) :: cs) }
                     Msg princ chan m ()
-                    
+
        ||| Free the communication channel from a principle.
        |||
        ||| @p The principle being freed.
-       ||| @v Proof that the principle is part of the protocol.                
+       ||| @v Proof that the principle is part of the protocol.
        DropChannel : %erase x
                      {x : a} -> (p : princ) -> (v : Valid p cs) ->
                      { ProtoT x cs ==> ProtoT x (remove cs v) }
-                     Msg princ chan m ()   
+                     Msg princ chan m ()
 
        ||| Send a message to a principle in the protocol.
        |||
@@ -132,17 +132,17 @@ using (cs : List (princ, chan))
        SendTo : %erase k
                 Marshal a chan m =>
                   (p : princ) -> (val : a) -> (v : Valid p cs) ->
-             { ProtoT (DoSend p a k') cs ==> ProtoT (k' val) cs } 
+             { ProtoT (DoSend p a k') cs ==> ProtoT (k' val) cs }
                Msg princ chan m ()
-               
+
        ||| Receive a message from a principle in the protocol.
        |||
        ||| @p The originator of the message.
-       ||| @v Proof that the principle is part of the protocol.                
+       ||| @v Proof that the principle is part of the protocol.
        RecvFrom : %erase k
                   Marshal a chan m =>
                   (p : princ) -> (v : Valid p cs) ->
-             { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs } 
+             { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs }
                Msg princ chan m a
 
        ||| Step through the protocol.
@@ -153,7 +153,7 @@ using (cs : List (princ, chan))
 -- ----------------------------------------------- [ MSG Effect Implementation ]
 ||| Definition of the message effect.
 MSG : Type -> (Type -> Type) -> List (princ, chan) -> Actions -> EFFECT
-MSG {chan} princ m ps xs = MkEff (ProtoT xs ps) (Msg princ chan m) 
+MSG {chan} princ m ps xs = MkEff (ProtoT xs ps) (Msg princ chan m)
 
 ||| Send a message to a principle.
 |||
@@ -161,23 +161,23 @@ MSG {chan} princ m ps xs = MkEff (ProtoT xs ps) (Msg princ chan m)
 ||| @val The message to be sent.
 sendTo : Marshal a chan m =>
          {cs : List (p, chan)} ->
-         (x : p) -> 
+         (x : p) ->
          (val : a) ->
-         {default IsValid prf : Valid x cs} ->     
-         { [MSG p m cs (DoSend x a k')] ==> 
+         {default IsValid prf : Valid x cs} ->
+         { [MSG p m cs (DoSend x a k')] ==>
            [MSG p m cs (k' val)] } Eff m ()
-sendTo proc v {prf} = effect $ SendTo proc v prf
+sendTo proc v {prf} = call $ SendTo proc v prf
 
 ||| Receive a message from a principle.
 |||
 ||| @x The originator of the message.
-recvFrom : Marshal a chan m => 
+recvFrom : Marshal a chan m =>
          {cs : List (p, chan)}
          -> (x : p)
          -> {default IsValid prf : Valid x cs}
-         -> { [MSG p m cs (DoRecv x a k)] ==> 
+         -> { [MSG p m cs (DoRecv x a k)] ==>
               [MSG p m cs (k result)] } Eff m a
-recvFrom proc {prf} = effect $ RecvFrom proc prf
+recvFrom proc {prf} = call $ RecvFrom proc prf
 
 ||| Bind the protocol implementation with the associated communication channel.
 |||
@@ -186,9 +186,9 @@ recvFrom proc {prf} = effect $ RecvFrom proc prf
 setChan : {cs : List (princ, chan)}
         -> (p : princ)
         -> (c : chan)
-        -> { [MSG princ m cs xs] ==> 
+        -> { [MSG princ m cs xs] ==>
              [MSG princ m ((p := c) :: cs) xs] } Eff m ()
-setChan p c = effect $ SetChannel p c
+setChan p c = call $ SetChannel p c
 
 ||| Free the protocol implementation from the associated communication channel.
 |||
@@ -196,14 +196,14 @@ setChan p c = effect $ SetChannel p c
 dropChan : {cs : List (princ, chan)}
          -> (p : princ)
          -> {default IsValid v : Valid p cs}
-         -> { [MSG princ m cs xs] ==> 
+         -> { [MSG princ m cs xs] ==>
               [MSG princ m (remove cs v) xs] } Eff m ()
-dropChan p {v} = effect $ DropChannel p v
+dropChan p {v} = call $ DropChannel p v
 
 ||| Continue executing the protocol.
 continue : {cs : List (princ, chan)} ->
         { [MSG princ m cs (DoRec k)] ==> [MSG princ m cs k] } Eff m ()
-continue = effect $ Cont
+continue = call $ Cont
 
 syntax rec [x] = continue >>= (\_ => x)
 
@@ -219,10 +219,10 @@ syntax rec [x] = continue >>= (\_ => x)
 instance Marshal a PID IO where
     marshalSend (MkPid chan) x = sendToThread chan (x, prim__vm)
     unmarshalRecv (MkPid chan) = getMsgFrom chan
-        where 
+        where
           -- if the sender is not the expected sender, try again then
           -- put the message back in our queue.
-          getMsgFrom : Ptr -> IO t 
+          getMsgFrom : Ptr -> IO t
           getMsgFrom {t} p = do (m, sender) <- getMsg {a = (t, Ptr)}
                                 q <- eqPtr p sender
                                 if q then return m
@@ -230,24 +230,24 @@ instance Marshal a PID IO where
                                              m' <- getMsgFrom p
                                              sendToThread prim__vm (m, sender)
                                              return m'
-         
+
 --- Perform the marshalling in relation to the protocol specification.
 instance Handler (Msg princ PID IO) IO where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p v) k = k () Proto
   handle Proto Cont k = k () Proto
 
-  handle (Proto {cs}) (SendTo p v valid) k 
+  handle (Proto {cs}) (SendTo p v valid) k
          = do let pid = lookup cs valid
               marshalSend pid v
               k () Proto
-  handle (Proto {cs}) (RecvFrom {a} p valid) k 
+  handle (Proto {cs}) (RecvFrom {a} p valid) k
          = do -- test <- checkMsgs
               let pid = lookup cs valid
               k !(unmarshalRecv pid) Proto
 
 -- ----------------------------------------------------- [ The Network Context ]
--- Handlers for sending marshalled strings over a network 
+-- Handlers for sending marshalled strings over a network
 
 NetError : Type
 NetError = String
@@ -261,7 +261,7 @@ class Netvalue a where
 
 -- Generic marshelling commands for data in the Network Context.
 instance Netvalue a => Marshal a Socket (IOExcept String) where
-  marshalSend sock v 
+  marshalSend sock v
          = do res <- ioe_lift $ send sock (toNetString v)
               case res of
                    Left err => ioe_fail (show err)
@@ -293,7 +293,7 @@ instance Monad m => Handler (Msg princ Socket m) m where
               k !(unmarshalRecv sock) Proto
 
 -- ------------------------------------------------------------- [ IPC Context ]
--- Handlers for communicating with an external application 
+-- Handlers for communicating with an external application
 
 ||| How to serialise and deserialise a data type `a`.
 class IPCValue a where
@@ -321,7 +321,7 @@ instance IPCValue String where
 instance IPCValue a => Marshal a File (IOExcept String) where
   marshalSend f v = do ioe_lift $ fwrite f (toIPCString v)
                        ioe_lift $ fflush f
-                       
+
   unmarshalRecv f = do --                        x <- ioe_lift $ fpoll f
                        if not True
                          then ioe_fail "Nothing to receive"

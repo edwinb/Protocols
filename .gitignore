@@ -1,0 +1,5 @@
+*.ibc
+.dir-locals.el
+*~
+.\#*
+\#*
