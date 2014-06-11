@@ -314,7 +314,7 @@ fget f = do fpoll f
 
 -- Serialisation commands for `String` types
 instance IPCValue String where
-  toIPCString x   = x
+  toIPCString x   = x ++ "\n"
   fromIPCString x = Just x
 
 -- Generic marshalling commands for data in the IPC context.
