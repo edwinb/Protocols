@@ -10,15 +10,46 @@ import Control.IOExcept
 
 data MsgError = Timeout | InvalidData
 
-data MsgResult a = OK a
-                 | Err MsgError
+data FailMode = ByAction | ByProgram
 
--- ||| Detail how to serialise data for a particular communication channel.
--- class Marshal ty chanTy chan where
---       ||| Marshal a value and then send using the communication channel.
---       marshal   : chan -> val -> MsgResult ()
---       ||| Receive a value from the communication channel and unmarhsal it.
---       unmarshal : chan -> MsgResult val
+data TransportMode = Direct FailMode
+                   | Via FailMode Type 
+
+data CanFail : TransportMode -> Type where
+     DirectFail : CanFail (Direct ByAction)
+     ViaFail : CanFail (Via f t)
+
+failMode : TransportMode -> FailMode
+failMode (Direct fm) = fm 
+failMode (Via fm t) = fm
+
+data MsgResult : Type -> Type where
+     OK : a -> MsgResult a
+     Err : MsgError -> MsgResult a
+
+MsgResult' : FailMode -> Type -> Type
+MsgResult' ByAction x = MsgResult x
+MsgResult' ByProgram x = x
+
+class Marshal ty trans where 
+      marshal   : ty -> MsgResult trans
+      unmarshal : trans -> MsgResult ty
+
+instance Marshal String String where
+      marshal x = OK x 
+      unmarshal x = OK x 
+
+instance Marshal Int String where
+      marshal x = OK (show x) 
+      unmarshal x = OK (cast x) 
+
+class Everything a where
+
+instance Everything a where
+
+marshalClass : Type -> TransportMode -> Type
+marshalClass a (Direct fm) = Everything a
+marshalClass a (Via fm trans) = Marshal a trans
 
 -- ------------------------------------------------------------------------------
 -- Protocol actions (from perspective of one principal)
@@ -39,32 +70,6 @@ data Valid : p -> List (p, chan) -> Type where
 
 (:=) : p -> chan -> (p, chan)
 (:=) x c = (x, c)
-
-%reflection
-reflectListValid : List (p, chan) -> Tactic
-reflectListValid [] = Refine "First" `Seq` Solve
-reflectListValid (x :: xs)
-     = Try (Refine "First" `Seq` Solve)
-           (Refine "Later" `Seq` (Solve `Seq` reflectListValid xs))
--- TMP HACK! FIXME!
--- The evaluator needs a 'function case' to know its a reflection function
--- until we propagate that information! Without this, the _ case won't get
--- matched.
-reflectListValid (x ++ y) = Refine "First" `Seq` Solve
-reflectListValid _ = Refine "First" `Seq` Solve
-
-%reflection
-reflectValid : (P : Type) -> Tactic
-reflectValid (Valid a xs)
-     = reflectListValid xs `Seq` Solve
-
--- syntax IsValid = tactics { byReflection reflectValid; }
-syntax IsValid = (| First,
-                    Later First,
-                    Later (Later First),
-                    Later (Later (Later First)),
-                    Later (Later (Later (Later First))),
-                    Later (Later (Later (Later (Later First)))) |)
 
 lookup : (xs : List (p, chan)) -> Valid x xs -> chan
 lookup ((x, c) :: ys) First = c
@@ -91,7 +96,7 @@ CONC = MkEff () Conc
 
 -- Get VM here so it really is the parent VM not calculated in the
 -- child process!
-fork : (PID -> IO ()) -> { [CONC] } Eff IO PID
+fork : (PID -> IO ()) -> { [CONC] } Eff PID
 fork proc = call $ Fork (MkPid prim__vm) proc
 
 instance Handler Conc IO where
@@ -105,84 +110,107 @@ instance Handler Conc IO where
 
 -- ------------------------------------------------ [ MSG Effect Specification ]
 
-data ProtoT : a -> List (p, chan) -> Type where
-     Proto : {x : a} -> {cs : List (p, chan)} -> ProtoT x cs
+data ProtoT : Actions -> List (p, chan) -> Type where
+     Proto : {cs : List (p, chan)} -> ProtoT x cs
+
+send_cont : princ -> (a -> Actions) -> a -> MsgResult' fm () -> Actions
+send_cont {fm = ByProgram} p k val x = k val
+send_cont {fm = ByAction} p k val (OK x) = k val
+send_cont {fm = ByAction} {a} p k val (Err x) = DoSend p a k
+
+recv_cont : princ -> (a -> Actions) -> MsgResult' fm a -> Actions
+recv_cont {fm = ByProgram} p k x = k x
+recv_cont {fm = ByAction} p k (OK x) = k x
+recv_cont {fm = ByAction} {a} p k (Err x) = DoRecv p a k
 
 using (cs : List (princ, chan))
   ||| The message data type.
-  data Msg : Type -> Type -> (Type -> Type) -> Effect where
+  data Msg : TransportMode -> Type -> Effect where
        ||| Associate a communication channel with a principle.
        |||
        ||| @p The principle to be assigned to the channel.
        ||| @c The channel being assigned.
-       SetChannel : %erase x
-                    {x : a} -> (p : princ) -> (c : chan) ->
+       SetChannel : (p : princ) -> (c : chan) ->
                     { ProtoT x cs ==> ProtoT x ((p := c) :: cs) }
-                    Msg princ chan m ()
+                    Msg tm chan ()
 
        ||| Free the communication channel from a principle.
        |||
        ||| @p The principle being freed.
        ||| @v Proof that the principle is part of the protocol.
-       DropChannel : %erase x
-                     {x : a} -> (p : princ) -> (v : Valid p cs) ->
+       DropChannel : (p : princ) -> (v : Valid p cs) ->
                      { ProtoT x cs ==> ProtoT x (remove cs v) }
-                     Msg princ chan m ()
+                     Msg tm chan ()
 
        ||| Send a message to a principle in the protocol.
        |||
        ||| @p The message recipient.
        ||| @val The message to be sent.
-       ||| @v Proof that the principle is part of the protocol.
-       SendTo : %erase k
-                Marshal a chan m =>
-                  (p : princ) -> (val : a) -> (v : Valid p cs) ->
-             { ProtoT (DoSend p a k') cs ==> ProtoT (k' val) cs }
-               Msg princ chan m ()
+       ||| @prf Proof that the principle is part of the protocol.
+       SendTo : marshalClass a tm =>
+             (p : princ) -> (val : a) -> (prf : Valid p cs) ->
+             { ProtoT (DoSend p a k') cs ==> 
+               {send_ok} ProtoT (send_cont {fm=failMode tm} p k' val send_ok) cs }
+               Msg tm chan (MsgResult' (failMode tm) ())
 
        ||| Receive a message from a principle in the protocol.
        |||
        ||| @p The originator of the message.
        ||| @v Proof that the principle is part of the protocol.
-       RecvFrom : %erase k
-                  Marshal a chan m =>
-                  (p : princ) -> (v : Valid p cs) ->
-             { ProtoT (DoRecv p a k) cs ==> ProtoT (k result) cs }
-               Msg princ chan m a
+       RecvFrom : marshalClass a tm => 
+             (p : princ) -> (v : Valid p cs) ->
+             { ProtoT (DoRecv p a k) cs ==> 
+               {rcv_ok} ProtoT (recv_cont {fm=failMode tm} p k rcv_ok) cs }
+               Msg tm chan (MsgResult' (failMode tm) a)
 
        ||| Step through the protocol.
-       Cont : %erase k
-              { ProtoT (DoRec k) cs ==> ProtoT k cs }
-              Msg princ chan m ()
+       Cont : { ProtoT (DoRec k) cs ==> ProtoT k cs }
+              Msg tm chan ()
+
+       ||| Give up due to error
+       Abandon : CanFail tm -> MsgError -> 
+                 { ProtoT p cs ==> ProtoT p' cs }
+                 Msg tm chan (MsgResult' (failMode tm) ())
 
 -- ----------------------------------------------- [ MSG Effect Implementation ]
 ||| Definition of the message effect.
-MSG : Type -> (Type -> Type) -> List (princ, chan) -> Actions -> EFFECT
-MSG {chan} princ m ps xs = MkEff (ProtoT xs ps) (Msg princ chan m)
+GEN_MSG : TransportMode -> List (princ, chan) -> Actions -> EFFECT
+GEN_MSG {chan} tm ps xs = MkEff (ProtoT xs ps) (Msg tm chan)
 
-||| Send a message to a principle.
-|||
-||| @x The recipient of the message.
-||| @val The message to be sent.
-sendTo : Marshal a chan m =>
+||| Definition of the message effect.
+MSG : List (princ, chan) -> Actions -> EFFECT
+MSG {chan} ps xs = GEN_MSG (Direct ByAction) ps xs
+
+||| Definition of the concurrency message effect (no failure).
+CONC_MSG : List (princ, chan) -> Actions -> EFFECT
+CONC_MSG {chan} ps xs = GEN_MSG (Direct ByProgram) ps xs
+
+using (tm : TransportMode)
+  ||| Send a message to a principle.
+  |||
+  ||| @x The recipient of the message.
+  ||| @val The message to be sent.
+  sendTo : marshalClass a tm =>
          {cs : List (p, chan)} ->
          (x : p) ->
          (val : a) ->
-         {default IsValid prf : Valid x cs} ->
-         { [MSG p m cs (DoSend x a k')] ==>
-           [MSG p m cs (k' val)] } Eff m ()
-sendTo proc v {prf} = call $ SendTo proc v prf
+         {auto prf : Valid x cs} ->
+         { [GEN_MSG tm cs (DoSend x a k')] ==>
+           {send_ok} [GEN_MSG tm cs (send_cont {fm=failMode tm} x k' val send_ok)] } 
+         Eff (MsgResult' (failMode tm) ())
+  sendTo proc v {prf} = call $ SendTo proc v prf
 
-||| Receive a message from a principle.
-|||
-||| @x The originator of the message.
-recvFrom : Marshal a chan m =>
-         {cs : List (p, chan)}
+  ||| Receive a message from a principle.
+  |||
+  ||| @x The originator of the message.
+  recvFrom : marshalClass a tm =>
+            {cs : List (p, chan)}
          -> (x : p)
-         -> {default IsValid prf : Valid x cs}
-         -> { [MSG p m cs (DoRecv x a k)] ==>
-              [MSG p m cs (k result)] } Eff m a
-recvFrom proc {prf} = call $ RecvFrom proc prf
+         -> {auto prf : Valid x cs}
+         -> { [GEN_MSG tm cs (DoRecv x a k)] ==>
+              {rcv_ok} [GEN_MSG tm cs (recv_cont {fm=failMode tm} x k rcv_ok)] } 
+            Eff (MsgResult' (failMode tm) a)
+  recvFrom proc {prf} = call $ RecvFrom proc prf
 
 ||| Bind the protocol implementation with the associated communication channel.
 |||
@@ -191,8 +219,8 @@ recvFrom proc {prf} = call $ RecvFrom proc prf
 setChan : {cs : List (princ, chan)}
         -> (p : princ)
         -> (c : chan)
-        -> { [MSG princ m cs xs] ==>
-             [MSG princ m ((p := c) :: cs) xs] } Eff m ()
+        -> { [GEN_MSG fm cs xs] ==>
+             [GEN_MSG fm ((p := c) :: cs) xs] } Eff ()
 setChan p c = call $ SetChannel p c
 
 ||| Free the protocol implementation from the associated communication channel.
@@ -200,15 +228,28 @@ setChan p c = call $ SetChannel p c
 ||| @p The principle being freed.
 dropChan : {cs : List (princ, chan)}
          -> (p : princ)
-         -> {default IsValid v : Valid p cs}
-         -> { [MSG princ m cs xs] ==>
-              [MSG princ m (remove cs v) xs] } Eff m ()
+         -> {auto v : Valid p cs}
+         -> { [GEN_MSG fm cs xs] ==>
+              [GEN_MSG fm (remove cs v) xs] } Eff ()
 dropChan p {v} = call $ DropChannel p v
 
 ||| Continue executing the protocol.
 continue : {cs : List (princ, chan)} ->
-        { [MSG princ m cs (DoRec k)] ==> [MSG princ m cs k] } Eff m ()
+        { [GEN_MSG fm cs (DoRec k)] ==> [GEN_MSG fm cs k] } Eff ()
 continue = call $ Cont
+
+abandon : {cs : List (princ, chan)} -> 
+          {auto prf : CanFail tm} ->
+          MsgError -> 
+          { [GEN_MSG tm cs p] ==> [GEN_MSG tm cs p'] } 
+          Eff (MsgResult' (failMode tm) ())
+abandon {prf} e = call $ Abandon prf e
+
+fail : {cs : List (princ, chan)} -> 
+       {auto prf : CanFail tm} ->
+       { [GEN_MSG tm cs p] ==> [GEN_MSG tm cs p'] } 
+       Eff (MsgResult' (failMode tm) ())
+fail {prf} = call $ Abandon prf InvalidData
 
 syntax rec [x] = continue >>= (\_ => x)
 
@@ -219,11 +260,47 @@ syntax rec [x] = continue >>= (\_ => x)
 -- ------------------------------------------------- [ Message Passing Context ]
 -- Handlers for message passing concurrency
 
+--- Perform the marshalling in relation to the protocol specification.
+instance Handler (Msg (Direct ByAction) PID) (IOExcept MsgError) where
+  handle Proto (SetChannel p c) k = k () Proto
+  handle Proto (DropChannel p v) k = k () Proto
+  handle Proto Cont k = k () Proto
+  handle Proto (Abandon DirectFail e) k = ioe_fail e
 
---- Generic marshalling commands for sending data between threads.
-instance Marshal a PID IO where
-    marshalSend (MkPid chan) x = sendToThread chan (x, prim__vm)
-    unmarshalRecv (MkPid chan) = getMsgFrom chan
+  handle (Proto {cs}) (SendTo p v valid) k
+         = do let MkPid pid = lookup cs valid
+              ioe_lift $ sendToThread pid (v, prim__vm)
+              k (OK ()) Proto
+  handle (Proto {cs}) (RecvFrom {a} p valid) k
+         = do -- test <- checkMsgs
+              let MkPid pid = lookup cs valid
+              k (OK !(getMsgFrom pid)) Proto
+        where
+          -- if the sender is not the expected sender, try again then
+          -- put the message back in our queue.
+          getMsgFrom : Ptr -> IOExcept MsgError t
+          getMsgFrom {t} p = do (m, sender) <- ioe_lift $ getMsg {a = (t, Ptr)}
+                                q <- ioe_lift $ eqPtr p sender
+                                if q then return m
+                                     else do ioe_lift $ putStrLn "RETRY"
+                                             m' <- getMsgFrom p
+                                             ioe_lift $ sendToThread prim__vm (m, sender)
+                                             return m'
+
+instance Handler (Msg (Direct ByProgram) PID) IO where
+  handle Proto (SetChannel p c) k = k () Proto
+  handle Proto (DropChannel p v) k = k () Proto
+  handle Proto Cont k = k () Proto
+  handle Proto (Abandon DirectFail e) k impossible
+
+  handle (Proto {cs}) (SendTo p v valid) k
+         = do let MkPid pid = lookup cs valid
+              sendToThread pid (v, prim__vm)
+              k () Proto
+  handle (Proto {cs}) (RecvFrom {a} p valid) k
+         = do -- test <- checkMsgs
+              let MkPid pid = lookup cs valid
+              k !(getMsgFrom pid) Proto
         where
           -- if the sender is not the expected sender, try again then
           -- put the message back in our queue.
@@ -236,21 +313,8 @@ instance Marshal a PID IO where
                                              sendToThread prim__vm (m, sender)
                                              return m'
 
---- Perform the marshalling in relation to the protocol specification.
-instance Handler (Msg princ PID IO) IO where
-  handle Proto (SetChannel p c) k = k () Proto
-  handle Proto (DropChannel p v) k = k () Proto
-  handle Proto Cont k = k () Proto
 
-  handle (Proto {cs}) (SendTo p v valid) k
-         = do let pid = lookup cs valid
-              marshalSend pid v
-              k () Proto
-  handle (Proto {cs}) (RecvFrom {a} p valid) k
-         = do -- test <- checkMsgs
-              let pid = lookup cs valid
-              k !(unmarshalRecv pid) Proto
-
+{-
 -- ----------------------------------------------------- [ The Network Context ]
 -- Handlers for sending marshalled strings over a network
 
@@ -264,7 +328,7 @@ class Netvalue a where
   ||| Deserialise a String representation into data.
   fromNetString : String -> Maybe a
 
--- Generic marshelling commands for data in the Network Context.
+-- Generic marshalling commands for data in the Network Context.
 instance Netvalue a => Marshal a Socket (IOExcept String) where
   marshalSend sock v
          = do res <- ioe_lift $ send sock (toNetString v)
@@ -296,6 +360,7 @@ instance Monad m => Handler (Msg princ Socket m) m where
   handle (Proto {cs}) (RecvFrom {a} p valid) k
          = do let sock = lookup cs valid
               k !(unmarshalRecv sock) Proto
+-}
 
 -- ------------------------------------------------------------- [ IPC Context ]
 -- Handlers for communicating with an external application
@@ -317,6 +382,7 @@ fget f = do fpoll f
                        Just '\n' => return ""
                        Just c => return (strCons c !(fget' h))
 
+{-
 -- Serialisation commands for `String` types
 instance IPCValue String where
   toIPCString x   = x ++ "\n"
@@ -334,20 +400,31 @@ instance IPCValue a => Marshal a File (IOExcept String) where
                                  case fromIPCString {a} inval of
                                     Nothing => ioe_fail "Invalid data"
                                     Just x => return x
+-}
 
 -- Perform the marshalling in relation to the protocol specification.
-instance Monad m => Handler (Msg princ File m) m where
+instance Handler (Msg (Via ByProgram String) File) (IOExcept MsgError) where
   handle Proto (SetChannel p c) k = k () Proto
   handle Proto (DropChannel p c) k = k () Proto
   handle Proto Cont k = k () Proto
+  handle Proto (Abandon _ e) k = ioe_fail e
 
   handle (Proto {cs}) (SendTo p v valid) k
          = do let f = lookup cs valid
-              marshalSend f v
-              k () Proto
+              let x : MsgResult String = marshal v -- FIXME: Idris bug!
+              case x of
+                   OK str => do ioe_lift $ fwrite f str
+                                ioe_lift $ fflush f
+                                k () Proto
+                   Err e => ioe_fail e
 
   handle (Proto {cs}) (RecvFrom {a} p valid) k
          = do let f = lookup cs valid
-              k !(unmarshalRecv f) Proto
-
+              x <- ioe_lift $ fpoll f
+              if not True
+                 then ioe_fail Timeout
+                 else do inval <- ioe_lift $ fread f
+                         case unmarshal {ty=a} inval of
+                              Err e => ioe_fail e
+                              OK val => k val Proto
 -- --------------------------------------------------------------------- [ EOF ]

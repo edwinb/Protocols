@@ -6,6 +6,7 @@ module System.Protocol
 import Effects
 import Effect.StdIO
 import Effect.Msg
+import Effect.Exception
 
 %access public
 
@@ -82,34 +83,38 @@ using (xs : List princ)
             = DoSend to ty k
   mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
   mkProcess x (Rec p) k = DoRec (mkProcess x p k)
-  mkProcess x (pure y) k = End
+  mkProcess x (pure y) k = k y
+
+  protoAs : (x : princ) -> Protocol xs () -> Actions
+  protoAs x p = mkProcess x p (\k => End)
 
 -- ------------------------------------------------------- [ Protocol Contexts ]
 
 ||| Definition of effectul protocols for the network context.
 Agent : {xs : List princ} ->
-           (Type -> Type) ->
            Protocol xs () -> princ -> 
            List (princ, chan) ->
            List EFFECT -> Type -> Type
-Agent {princ} {chan} m s p ps es t
-    = Eff m t (MSG princ m ps (mkProcess p s (\x => End)) :: es)
-              (\v => MSG princ m ps End :: es)
+Agent {princ} {chan} s p ps es t
+    = Eff t 
+            (GEN_MSG (Direct ByProgram) ps (protoAs p s) :: es)
+            (\v => GEN_MSG (Direct ByProgram) ps End :: es)
 
 ||| Definition of effectful protocols for concurrent processes.
 Process : {xs : List princ} ->
-           (Type -> Type) ->
            Protocol xs () -> princ -> 
            List (princ, PID) ->
            List EFFECT -> Type -> Type
-Process m s p ps es t = Agent m s p ps (CONC :: es) t
+Process s p ps es t = Agent s p ps (CONC :: es) t
 
 ||| Definition of effectful protocols for interprocess communication.
 IPC : {xs : List princ} ->
       Protocol xs () -> princ -> 
       List (princ, File) ->
       List EFFECT -> Type -> Type
-IPC s p ps es t = Agent (IOExcept String) s p ps es t
+IPC s p ps es t = Eff t 
+            (GEN_MSG (Via ByProgram String) ps (protoAs p s) :: es)
+            (\v => GEN_MSG (Via ByProgram String) ps End :: es)
 
 -- ------------------------------------------------------ [ Syntax Definitions ]
 

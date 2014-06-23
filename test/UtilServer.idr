@@ -31,7 +31,7 @@ util = do val <- 'Client ==> 'Server | Command
 -- follows the protocol, verified by the MSG effect
 
 runServer : (client : PID) ->
-            Process IO util 'Server ['Client := client] [STDIO] ()
+            Process util 'Server ['Client := client] [STDIO] ()
 runServer client
           = do cmd <- recvFrom 'Client
                putStrLn "SERVER: Got command"
@@ -47,7 +47,7 @@ runServer client
 -- Ditto for a client 
 
 runClient : (server : PID) ->
-            Process IO util 'Client ['Server := server] [STDIO] ()
+            Process util 'Client ['Server := server] [STDIO] ()
 runClient server
           = do putStr "Command: "
                x <- getStr
@@ -76,7 +76,7 @@ runClient server
 -- 'runServer' what the client/server VM pointers are (null as a placeholder 
 -- for itself)
 
-runUtil : Process IO util 'Client [] [STDIO] ()
+runUtil : Process util 'Client [] [STDIO] ()
 runUtil = do server <- spawn runServer [()]
              setChan 'Server server
              runClient server
