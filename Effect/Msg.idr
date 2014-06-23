@@ -8,12 +8,17 @@ import System.Concurrency.Raw
 import Network.Socket
 import Control.IOExcept
 
-||| Detail how to serialise data for a particular communication channel.
-class Marshal val chan (m : Type -> Type) where
-      ||| Marshal a value and then send using the communication channel.
-      marshalSend   : chan -> val -> m ()
-      ||| Receive a value from the communication channel and unmarhsal it.
-      unmarshalRecv : chan -> m val
+data MsgError = Timeout | InvalidData
+
+data MsgResult a = OK a
+                 | Err MsgError
+
+-- ||| Detail how to serialise data for a particular communication channel.
+-- class Marshal ty chanTy chan where
+--       ||| Marshal a value and then send using the communication channel.
+--       marshal   : chan -> val -> MsgResult ()
+--       ||| Receive a value from the communication channel and unmarhsal it.
+--       unmarshal : chan -> MsgResult val
 
 -- ------------------------------------------------------------------------------
 -- Protocol actions (from perspective of one principal)

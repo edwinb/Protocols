@@ -1,0 +1,52 @@
+\documentclass[british,final]{llncs}
+
+\usepackage[l2tabu,orthodox]{nag}
+\usepackage{fixltx2e}
+\usepackage{babel}
+\usepackage[iso]{isodate}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[protrusion=true, expansion=true]{microtype}
+\usepackage[strict=true]{csquotes}
+\usepackage{xspace}
+
+%\usepackage{mathpazo}
+%\usepackage[scaled=0.95]{helvet}
+\usepackage{courier}
+
+%\usepackage{fullpage}
+%\usepackage{hyperref}
+\usepackage[missing=0.9.12]{gitinfo}
+
+\usepackage{fpmacros}
+\usepackage{idrislang}
+\usepackage{url}
+
+%\input{conf.ltx}
+\input{library.ltx}
+
+\newcommand{\version}{\gitVtagn}
+
+\title{Protocols}
+\author{Edwin Brady \and Jan de Muijnck-Hughes}
+\institute{University of St Andrews, KY16 9SX, Scotland/UK,\\
+\email{\{ecb10,jfdm\}@st-andrews.ac.uk}}
+\date{\origdate\today}
+
+\newcommand{\effects}{\texttt{effects}}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Imagine an abstract
+\end{abstract}
+
+\input{content/intro.tex}
+\input{content/conclusions.tex}
+
+\bibliographystyle{abbrv}
+\bibliography{literature.bib}
+
+\end{document}
