@@ -46,10 +46,10 @@ prog range
                Add x y => do 'Program ==> 'User | (x : Int ** so (x < range))
                              prog range
 
-data Username = Jitu | Invalid
+data Username = Fred | Invalid
 
 instance Marshal Username String where
-  marshal Jitu = OK "Jitu\n"
+  marshal Fred = OK "Fred\n"
   marshal Invlaid = OK "invalid"
 
   unmarshal _ = Err InvalidData
@@ -58,7 +58,7 @@ instance Marshal Username String where
 login : Protocol ['User, 'Program] ()
 login = do 'Program ==> 'User | String
            case !('User ==> 'Program | Username) of
-                Jitu => prog 10
+                Fred => prog 10
                 Invalid => Done
 
 --------------------------------------------------------------------
@@ -89,10 +89,10 @@ runLogin : File -> IPC login 'User [] [STDIO] ()
 runLogin p = do setChan 'Program p
                 putStr !(recvFrom 'Program)
                 nm <- getStr
-                let uname = if (trim nm == "Jitu") then Jitu else Invalid
+                let uname = if (trim nm == "Fred") then Fred else Invalid
                 sendTo 'Program uname
                 case uname of
-                     Jitu => do dropChan 'Program
+                     Fred => do dropChan 'Program
                                 runProg p 10
                      Invalid => do dropChan 'Program
                                    return ()

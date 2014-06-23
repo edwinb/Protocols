@@ -6,7 +6,7 @@ print "Login:\n";
 $name = <STDIN>;
 chomp $name;
 
-if ($name eq "Jitu" || $name eq "Kevin" || $name eq "backdoor") {
+if ($name eq "Fred" || $name eq "Eve" || $name eq "backdoor") {
 
 if ($name eq "backdoor") {
     print "ALL YOUR BASE ARE BELONG TO US!\n";
