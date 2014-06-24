@@ -36,11 +36,11 @@ class Marshal ty trans where
       unmarshal : trans -> MsgResult ty
 
 instance Marshal String String where
-      marshal x = OK x 
+      marshal x = OK $ x ++ "\n" 
       unmarshal x = OK x 
 
 instance Marshal Int String where
-      marshal x = OK (show x) 
+      marshal x = OK $ (show x) ++ "\n"
       unmarshal x = OK (cast x) 
 
 class Everything a where
