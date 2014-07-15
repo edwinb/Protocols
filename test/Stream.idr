@@ -7,6 +7,10 @@ import System.Protocol
 
 data Command = Next | SetIncrement | Stop 
 
+gcInfo : String -> IO String
+gcInfo x = do mkForeign (FFun "idris_gcInfo" [] FUnit)
+              return x
+
 count : Protocol ['Client, 'Server] ()
 count = do cmd <- 'Client ==> 'Server | Command 
            case cmd of

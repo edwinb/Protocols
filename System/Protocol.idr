@@ -67,7 +67,7 @@ using (xs : List princ)
          {default IsElem pf : Elem from xs} ->
          {default IsElem pt : Elem to xs} ->
          Protocol xs a
-  Send from to {pf} {pt} = Send' from to pf pt
+  Send from to a {pf} {pt} = Send' from to a pf pt
 
   -- Syntactic Sugar for specifying protocols.
   syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem

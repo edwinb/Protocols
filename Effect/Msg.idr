@@ -140,7 +140,7 @@ using (cs : List (princ, chan))
        ||| @v Proof that the principle is part of the protocol.
        DropChannel : (p : princ) -> (v : Valid p cs) ->
                      { ProtoT x cs ==> ProtoT x (remove cs v) }
-                     Msg tm chan ()
+                     Msg tm chan () 
 
        ||| Send a message to a principle in the protocol.
        |||
@@ -169,7 +169,7 @@ using (cs : List (princ, chan))
 
        ||| Give up due to error
        Abandon : CanFail tm -> MsgError -> 
-                 { ProtoT p cs ==> ProtoT p' cs }
+                 { ProtoT k cs ==> ProtoT k' cs }
                  Msg tm chan (MsgResult' (failMode tm) ())
 
 -- ----------------------------------------------- [ MSG Effect Implementation ]
@@ -240,6 +240,7 @@ continue = call $ Cont
 
 abandon : {cs : List (princ, chan)} -> 
           {auto prf : CanFail tm} ->
+          {p': _} ->
           MsgError -> 
           { [GEN_MSG tm cs p] ==> [GEN_MSG tm cs p'] } 
           Eff (MsgResult' (failMode tm) ())
@@ -267,7 +268,7 @@ instance Handler (Msg (Direct ByAction) PID) (IOExcept MsgError) where
   handle Proto Cont k = k () Proto
   handle Proto (Abandon DirectFail e) k = ioe_fail e
 
-  handle (Proto {cs}) (SendTo p v valid) k
+  handle (Proto {cs}) (SendTo pr v valid) k
          = do let MkPid pid = lookup cs valid
               ioe_lift $ sendToThread pid (v, prim__vm)
               k (OK ()) Proto
@@ -428,3 +429,4 @@ instance Handler (Msg (Via ByProgram String) File) (IOExcept MsgError) where
                               Err e => ioe_fail e
                               OK val => k val Proto
 -- --------------------------------------------------------------------- [ EOF ]
+
