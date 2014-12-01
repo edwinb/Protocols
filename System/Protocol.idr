@@ -51,8 +51,11 @@ data Protocol : List princ -> Type -> Type where
      Send' : (from : princ) -> (to : princ) -> (a : Type) ->
              (prf : SendOK a from to xs b) -> Protocol xs b
      
-     ||| Implementation of Do notation for protocols.
+     ||| To support do-notation in protocols.
      (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
+
+     ||| Call a sub-protocol with a subset of the participants
+     With : SubList xs ys -> Protocol xs a -> Protocol ys a
 
      Rec : Inf (Protocol xs a) -> Protocol xs a       
      pure : a -> Protocol xs a
@@ -70,6 +73,9 @@ Send : (from : princ) -> (to : princ) -> (a : Type) ->
        {auto prf : SendOK a from to xs b} ->
        Protocol xs b
 Send from to a {prf} = Send' from to a prf
+
+Call : {auto prf : SubList xs ys} -> Protocol xs a -> Protocol ys a
+Call {prf} x = With prf x 
 
 -- Syntactic Sugar for specifying protocols.
 syntax [from] "==>" [to] "|" [t] = Send' from to t IsOK
@@ -89,6 +95,7 @@ mkProcess {xs = [to,from]} x (Send' from to ty SendRL) k with (prim__syntactic_e
       | Nothing = DoRecv from ty k 
       | (Just y) = DoSend to ty k
 
+mkProcess x (With _ xs) k = mkProcess x xs k
 mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
 mkProcess x (Rec p) k = DoRec (mkProcess x p k)
 mkProcess x (pure y) k = k y
