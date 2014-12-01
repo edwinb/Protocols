@@ -7,6 +7,9 @@ import System.Protocol
 
 data Command = Next | SetIncrement | Stop 
 
+instance Default Command where
+  default = Stop
+
 gcInfo : String -> IO String
 gcInfo x = do mkForeign (FFun "idris_gcInfo" [] FUnit)
               return x
@@ -20,7 +23,7 @@ count = do cmd <- 'Client ==> 'Server | Command
                                  Rec count
               Stop => Done
 
--- covering
+covering
 countServer : (c : Int) -> (v : Int) -> (inc : Int) -> (client : PID) ->
               Process count 'Server ['Client := client] [] ()
 countServer c v inc client 
@@ -61,3 +64,4 @@ doCount = do server <- spawn (countServer 0 0 1) []
 
 main : IO ()
 main = runConc [()] doCount
+

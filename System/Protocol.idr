@@ -15,78 +15,86 @@ using (xs : List a)
        Here  : Elem x (x :: xs)
        There : Elem x xs -> Elem x (y :: xs)
 
-%reflection
-reflectListElem : List a -> Tactic
-reflectListElem [] = Refine "Here" `Seq` Solve
-reflectListElem (x :: xs)
-     = Try (Refine "Here" `Seq` Solve)
-           (Refine "There" `Seq` (Solve `Seq` reflectListElem xs))
--- TMP HACK! FIXME!
--- The evaluator needs a 'function case' to know its a reflection function
--- until we propagate that information! Without this, the _ case won't get
--- matched. 
-reflectListElem (x ++ y) = Refine "Here" `Seq` Solve
-reflectListElem _ = Refine "Here" `Seq` Solve
-
-%reflection
-reflectElem : (P : Type) -> Tactic
-reflectElem (Elem a xs)
-     = reflectListElem xs `Seq` Solve
-
-syntax IsElem = tactics { search 100; }
+syntax IsOK = tactics { search 100; }
 
 -- ----------------------------------------------------- [ Protocol Definition ]
 
-using (xs : List princ)
-  ||| Definition of protocol actions. 
-  data Protocol : List princ -> Type -> Type where
-       ||| Send data from one principal to another.
-       |||
-       ||| @from The message originator.
-       ||| @to   The message recipient.
-       ||| @a    The type of the message to be sent.
-       Send' : (from : princ) -> (to : princ) -> (a : Type) ->
-                Elem from xs -> Elem to xs -> Protocol xs a
-       
-       ||| Implementation of Do notation for protocols.
-       (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
+-- using (xs : List princ)
+class Unit u where
+      unit : u
 
-       Rec : Inf (Protocol xs a) -> Protocol xs a       
-       pure : a -> Protocol xs a
+instance Unit () where
+    unit = () 
 
-  ||| Signify the end of a protocol.
-  Done : Protocol xs ()
-  Done = pure ()
+||| Checks if a send is valid, and computes the return type
+|||
+||| The return type tells us how the rest of the protocol can depend on
+||| the value that was trasmitted. If there are only two participants,
+||| clearly they both know the value, so it is safe to depend on it.
+||| Otherwise, we can't depend on it, so return ().
+data SendOK : (transmitted : Type) -> 
+              (from : princ) -> 
+              (to : princ) -> 
+              (participants : List princ) -> 
+              (continuation : Type) -> Type where
+     SendLR : SendOK a x y [x, y] a
+     SendRL : SendOK a x y [y, x] a
+     SendGhost : Elem x xs -> Elem y xs -> SendOK a x y xs ()
 
-  ||| Send data from one principal to another.
-  |||
-  ||| @from The message originator.
-  ||| @to   The message recipient.
-  ||| @a    The type of the message to be sent.       
-  Send : (from : princ) -> (to : princ) -> (a : Type) ->
-         {default IsElem pf : Elem from xs} ->
-         {default IsElem pt : Elem to xs} ->
-         Protocol xs a
-  Send from to a {pf} {pt} = Send' from to a pf pt
+||| Definition of protocol actions. 
+data Protocol : List princ -> Type -> Type where
+     ||| Send data from one principal to another.
+     |||
+     ||| @from The message originator.
+     ||| @to   The message recipient.
+     ||| @a    The type of the message to be sent.
+     Send' : (from : princ) -> (to : princ) -> (a : Type) ->
+             (prf : SendOK a from to xs b) -> Protocol xs b
+     
+     ||| Implementation of Do notation for protocols.
+     (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
 
-  -- Syntactic Sugar for specifying protocols.
-  syntax [from] "==>" [to] "|" [t] = Send' from to t IsElem IsElem
+     Rec : Inf (Protocol xs a) -> Protocol xs a       
+     pure : a -> Protocol xs a
 
-  total
-  mkProcess : (x : princ) -> Protocol xs ty -> (ty -> Actions) -> Actions
-  mkProcess x (Send' from to ty fp tp) k with (prim__syntactic_eq _ _ x from)
-    mkProcess x (Send' from to ty fp tp) k | Nothing with (prim__syntactic_eq _ _ x to)
-      mkProcess x (Send' from to ty fp tp) k | Nothing | Nothing = End
-      mkProcess x (Send' from x ty fp tp) k | Nothing | (Just refl) 
-            = DoRecv from ty k
-    mkProcess x (Send' x to ty fp tp) k | (Just refl) 
-            = DoSend to ty k
-  mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
-  mkProcess x (Rec p) k = DoRec (mkProcess x p k)
-  mkProcess x (pure y) k = k y
+||| Signify the end of a protocol.
+Done : Protocol xs ()
+Done = pure ()
 
-  protoAs : (x : princ) -> Protocol xs () -> Actions
-  protoAs x p = mkProcess x p (\k => End)
+||| Send data from one principal to another.
+|||
+||| @from The message originator.
+||| @to   The message recipient.
+||| @a    The type of the message to be sent.       
+Send : (from : princ) -> (to : princ) -> (a : Type) ->
+       {auto prf : SendOK a from to xs b} ->
+       Protocol xs b
+Send from to a {prf} = Send' from to a prf
+
+-- Syntactic Sugar for specifying protocols.
+syntax [from] "==>" [to] "|" [t] = Send' from to t IsOK
+
+total
+mkProcess : (x : princ) -> Protocol xs ty -> (ty -> Actions) -> Actions
+mkProcess x (Send' from to ty (SendGhost y z)) k with (prim__syntactic_eq _ _ x from)
+  mkProcess x (Send' from to ty (SendGhost y z)) k | Nothing with (prim__syntactic_eq _ _ x to)
+    mkProcess x (Send' from to ty (SendGhost y z)) k | Nothing | Nothing = k () 
+    mkProcess x (Send' from to ty (SendGhost y z)) k | Nothing | (Just w) = DoRecv from ty (\x => k ())
+  mkProcess x (Send' from to ty (SendGhost y z)) k | (Just w) = DoSend to ty (\x => k ()) 
+
+mkProcess {xs = [from,to]} x (Send' from to ty SendLR) k with (prim__syntactic_eq _ _ x from)
+      | Nothing = DoRecv from ty k 
+      | (Just y) = DoSend to ty k
+mkProcess {xs = [to,from]} x (Send' from to ty SendRL) k with (prim__syntactic_eq _ _ x from)
+      | Nothing = DoRecv from ty k 
+      | (Just y) = DoSend to ty k
+
+mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
+mkProcess x (Rec p) k = DoRec (mkProcess x p k)
+mkProcess x (pure y) k = k y
+
+protoAs : (x : princ) -> Protocol xs () -> Actions
+protoAs x p = mkProcess x p (\k => End)
 
 -- ------------------------------------------------------- [ Protocol Contexts ]
 
@@ -123,3 +131,4 @@ IPC s p ps es t = Eff t
 syntax spawn [p] [rs] = fork (\parent => runInit (Proto :: () :: rs) (p parent))
 syntax runConc [es] [p] = runInit (Proto :: () :: es) p
 -- --------------------------------------------------------------------- [ EOF ]
+
