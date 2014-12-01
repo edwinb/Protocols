@@ -10,10 +10,15 @@ import Effect.Exception
 
 %access public
 
-using (xs : List a)
-  data Elem : a -> List a -> Type where
-       Here  : Elem x (x :: xs)
-       There : Elem x xs -> Elem x (y :: xs)
+data Elem : a -> List a -> Type where
+     Here  : Elem x (x :: xs)
+     There : Elem x xs -> Elem x (y :: xs)
+
+isElemSyn : (x : a) -> (xs : List a) -> Maybe (Elem x xs)
+isElemSyn x [] = Nothing
+isElemSyn x (y :: xs) with (prim__syntactic_eq _ _ x y)
+  isElemSyn x (y :: xs) | Nothing = pure $ There !(isElemSyn x xs)
+  isElemSyn x (x :: xs) | (Just Refl) = pure Here
 
 syntax IsOK = tactics { search 100; }
 
@@ -55,7 +60,7 @@ data Protocol : List princ -> Type -> Type where
      (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
 
      ||| Call a sub-protocol with a subset of the participants
-     With : SubList xs ys -> Protocol xs a -> Protocol ys a
+     With : SubList xs ys -> Protocol xs () -> Protocol ys ()
 
      Rec : Inf (Protocol xs a) -> Protocol xs a       
      pure : a -> Protocol xs a
@@ -74,14 +79,16 @@ Send : (from : princ) -> (to : princ) -> (a : Type) ->
        Protocol xs b
 Send from to a {prf} = Send' from to a prf
 
-Call : {auto prf : SubList xs ys} -> Protocol xs a -> Protocol ys a
+Call : {auto prf : SubList xs ys} -> Protocol xs () -> Protocol ys ()
 Call {prf} x = With prf x 
 
 -- Syntactic Sugar for specifying protocols.
 syntax [from] "==>" [to] "|" [t] = Send' from to t IsOK
 
-total
-mkProcess : (x : princ) -> Protocol xs ty -> (ty -> Actions) -> Actions
+-- total
+mkProcess : (x : princ) -> Protocol xs ty -> 
+            {auto prf : Elem x xs} ->
+            (ty -> Actions) -> Actions
 mkProcess x (Send' from to ty (SendGhost y z)) k with (prim__syntactic_eq _ _ x from)
   mkProcess x (Send' from to ty (SendGhost y z)) k | Nothing with (prim__syntactic_eq _ _ x to)
     mkProcess x (Send' from to ty (SendGhost y z)) k | Nothing | Nothing = k () 
@@ -95,21 +102,23 @@ mkProcess {xs = [to,from]} x (Send' from to ty SendRL) k with (prim__syntactic_e
       | Nothing = DoRecv from ty k 
       | (Just y) = DoSend to ty k
 
-mkProcess x (With _ xs) k = mkProcess x xs k
+mkProcess x (With {xs} sub prot) k with (isElemSyn x xs)
+  mkProcess x (With {xs = xs} sub prot) k | Nothing = k () 
+  mkProcess x (With {xs = xs} sub prot) k | (Just prf) = mkProcess x prot k
 mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
 mkProcess x (Rec p) k = DoRec (mkProcess x p k)
 mkProcess x (pure y) k = k y
 
-protoAs : (x : princ) -> Protocol xs () -> Actions
+protoAs : (x : princ) -> Protocol xs () -> {auto prf : Elem x xs} -> Actions
 protoAs x p = mkProcess x p (\k => End)
 
 -- ------------------------------------------------------- [ Protocol Contexts ]
 
 ||| Definition of effectul protocols for the network context.
 Agent : {xs : List princ} ->
-           Protocol xs () -> princ -> 
-           List (princ, chan) ->
-           List EFFECT -> Type -> Type
+        Protocol xs () -> (x : princ) -> {auto prf : Elem x xs} -> 
+        List (princ, chan) ->
+        List EFFECT -> Type -> Type
 Agent {princ} {chan} s p ps es t
     = Eff t 
             (GEN_MSG (Direct ByProgram) ps (protoAs p s) :: es)
@@ -117,14 +126,14 @@ Agent {princ} {chan} s p ps es t
 
 ||| Definition of effectful protocols for concurrent processes.
 Process : {xs : List princ} ->
-           Protocol xs () -> princ -> 
-           List (princ, PID) ->
-           List EFFECT -> Type -> Type
+          Protocol xs () -> (x : princ) -> {auto prf : Elem x xs} ->
+          List (princ, PID) ->
+          List EFFECT -> Type -> Type
 Process s p ps es t = Agent s p ps (CONC :: es) t
 
 ||| Definition of effectful protocols for interprocess communication.
 IPC : {xs : List princ} ->
-      Protocol xs () -> princ -> 
+      Protocol xs () -> (x : princ) -> {auto prf : Elem x xs} ->
       List (princ, File) ->
       List EFFECT -> Type -> Type
 IPC s p ps es t = Eff t 
