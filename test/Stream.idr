@@ -2,6 +2,7 @@ module Main
 
 import Effects
 import Effect.StdIO
+import Effect.Msg
 
 import System.Protocol
 
@@ -12,7 +13,7 @@ instance Default Command where
 
 gcInfo : String -> IO String
 gcInfo x = do mkForeign (FFun "idris_gcInfo" [] FUnit)
-              return x
+              pure x
 
 count : Protocol ['Client, 'Server] ()
 count = do cmd <- 'Client ==> 'Server | Command 
@@ -56,12 +57,22 @@ countClient server = do
                     False => do sendTo 'Server Stop -- | fail
                                 pure ()
 
+doNothing : Protocol ['Client, 'Server] ()
+doNothing = Done
+
+foo : (server : File) -> Agent' {chan=File} doNothing 'Client [] [STDIO] ()
+foo s = do setChan 'Server s
+           dropChan 'Server -- {v = First}
+--            return ()
+
 doCount : Process count 'Client [] [STDIO] ()
-doCount = do server <- spawn (countServer 0 0 1) []
+doCount = with Effects do 
+             server <- spawn (countServer 0 0 1) []
              setChan 'Server server 
              countClient server 
-             dropChan 'Server
+             dropChan 'Server -- {v = First}
+--              return () -- ?foo
 
-main : IO ()
-main = runConc [()] doCount
+-- main : IO ()
+-- main = runConc [()] doCount
 

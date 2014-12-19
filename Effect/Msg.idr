@@ -185,32 +185,32 @@ MSG {chan} ps xs = GEN_MSG (Direct ByAction) ps xs
 CONC_MSG : List (princ, chan) -> Actions -> EFFECT
 CONC_MSG {chan} ps xs = GEN_MSG (Direct ByProgram) ps xs
 
-using (tm : TransportMode)
-  ||| Send a message to a principle.
-  |||
-  ||| @x The recipient of the message.
-  ||| @val The message to be sent.
-  sendTo : marshalClass a tm =>
-         {cs : List (p, chan)} ->
-         (x : p) ->
-         (val : a) ->
-         {auto prf : Valid x cs} ->
-         { [GEN_MSG tm cs (DoSend x a k')] ==>
-           {send_ok} [GEN_MSG tm cs (send_cont {fm=failMode tm} x k' val send_ok)] } 
-         Eff (MsgResult' (failMode tm) ())
-  sendTo proc v {prf} = call $ SendTo proc v prf
+-- using (tm : TransportMode)
+||| Send a message to a principle.
+|||
+||| @x The recipient of the message.
+||| @val The message to be sent.
+sendTo : marshalClass a tm =>
+     {cs : List (p, chan)} ->
+     (x : p) ->
+     (val : a) ->
+     {auto prf : Valid x cs} ->
+     { [GEN_MSG tm cs (DoSend x a k')] ==>
+       {send_ok} [GEN_MSG tm cs (send_cont {fm=failMode tm} x k' val send_ok)] } 
+     Eff (MsgResult' (failMode tm) ())
+sendTo proc v {prf} = call $ SendTo proc v prf
 
-  ||| Receive a message from a principle.
-  |||
-  ||| @x The originator of the message.
-  recvFrom : marshalClass a tm =>
-            {cs : List (p, chan)}
-         -> (x : p)
-         -> {auto prf : Valid x cs}
-         -> { [GEN_MSG tm cs (DoRecv x a k)] ==>
-              {rcv_ok} [GEN_MSG tm cs (recv_cont {fm=failMode tm} x k rcv_ok)] } 
-            Eff (MsgResult' (failMode tm) a)
-  recvFrom proc {prf} = call $ RecvFrom proc prf
+||| Receive a message from a principle.
+|||
+||| @x The originator of the message.
+recvFrom : marshalClass a tm =>
+        {cs : List (p, chan)}
+     -> (x : p)
+     -> {auto prf : Valid x cs}
+     -> { [GEN_MSG tm cs (DoRecv x a k)] ==>
+          {rcv_ok} [GEN_MSG tm cs (recv_cont {fm=failMode tm} x k rcv_ok)] } 
+        Eff (MsgResult' (failMode tm) a)
+recvFrom proc {prf} = call $ RecvFrom proc prf
 
 ||| Bind the protocol implementation with the associated communication channel.
 |||

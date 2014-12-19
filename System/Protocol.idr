@@ -60,7 +60,7 @@ data Protocol : List princ -> Type -> Type where
      (>>=) : Protocol xs a -> (a -> Protocol xs b) -> Protocol xs b
 
      ||| Call a sub-protocol with a subset of the participants
-     With : SubList xs ys -> Protocol xs () -> Protocol ys ()
+     With' : (xs : List a) -> SubList xs ys -> Protocol xs () -> Protocol ys ()
 
      Rec : Inf (Protocol xs a) -> Protocol xs a       
      pure : a -> Protocol xs a
@@ -80,12 +80,17 @@ Send : (from : princ) -> (to : princ) -> (a : Type) ->
 Send from to a {prf} = Send' from to a prf
 
 Call : {auto prf : SubList xs ys} -> Protocol xs () -> Protocol ys ()
-Call {prf} x = With prf x 
+Call {prf} x = With' _ prf x 
+
+With : (xs : List a) -> {auto prf : SubList xs ys} -> 
+       Protocol xs () -> Protocol ys ()
+With xs {prf} x = With' xs prf x 
 
 -- Syntactic Sugar for specifying protocols.
 syntax [from] "==>" [to] "|" [t] = Send' from to t IsOK
 
 -- total
+%reflection
 mkProcess : (x : princ) -> Protocol xs ty -> 
             {auto prf : Elem x xs} ->
             (ty -> Actions) -> Actions
@@ -102,9 +107,9 @@ mkProcess {xs = [to,from]} x (Send' from to ty SendRL) k with (prim__syntactic_e
       | Nothing = DoRecv from ty k 
       | (Just y) = DoSend to ty k
 
-mkProcess x (With {xs} sub prot) k with (isElemSyn x xs)
-  mkProcess x (With {xs = xs} sub prot) k | Nothing = k () 
-  mkProcess x (With {xs = xs} sub prot) k | (Just prf) = mkProcess x prot k
+mkProcess x (With' xs sub prot) k with (isElemSyn x xs)
+      | Nothing = k () 
+      | (Just prf) = mkProcess x prot k
 mkProcess x (y >>= f) k = mkProcess x y (\cmd => mkProcess x (f cmd) k)
 mkProcess x (Rec p) k = DoRec (mkProcess x p k)
 mkProcess x (pure y) k = k y
@@ -123,6 +128,15 @@ Agent {princ} {chan} s p ps es t
     = Eff t 
             (GEN_MSG (Direct ByProgram) ps (protoAs p s) :: es)
             (\v => GEN_MSG (Direct ByProgram) ps End :: es)
+
+Agent' : {xs : List princ} ->
+        Protocol xs () -> (x : princ) -> {auto prf : Elem x xs} -> 
+        List (princ, chan) ->
+        List EFFECT -> Type -> Type
+Agent' {princ} {chan} s p ps es t
+    = Eff t 
+            (GEN_MSG (Direct ByProgram) ps (protoAs p s) :: es)
+            (\v => GEN_MSG {princ} {chan} (Direct ByProgram) [] End :: es)
 
 ||| Definition of effectful protocols for concurrent processes.
 Process : {xs : List princ} ->
