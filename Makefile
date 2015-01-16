@@ -20,4 +20,8 @@ check: clean
 doc:
 	${IDRIS} --makedoc ${PKG}.ipkg
 
+test: install
+	(cd test; sh runtests.sh ${IDRIS})
+
+
 .PHONY: clean

@@ -57,27 +57,15 @@ countClient server = do
                     False => do sendTo 'Server Stop -- | fail
                                 pure ()
 
-doNothing : Protocol ['Client, 'Server] ()
-doNothing = Done
+-- doNothing : Protocol ['Client, 'Server] ()
+-- doNothing = Done
 
-foo : (server : File) -> Agent' {chan=File} doNothing 'Client [] [STDIO] ()
-foo s = do setChan 'Server s
-           dropChan 'Server -- {v = First}
---            return ()
+-- foo : (server : File) -> Agent' {chan=File} doNothing 'Client [] [STDIO] ()
+-- foo s = do setChan 'Server s
+--            dropChan 'Server -- {v = First}
+-- --            return ()
 
 doCount : Process count 'Client [] [STDIO] ()
-<<<<<<< HEAD
-doCount = with Effects do 
-             server <- spawn (countServer 0 0 1) []
-             setChan 'Server server 
-             countClient server 
-             dropChan 'Server -- {v = First}
---              return () -- ?foo
-
--- main : IO ()
--- main = runConc [()] doCount
-
-=======
 doCount = do server <- spawn (countServer 0 0 1) []
              setChan 'Server server
              countClient server
@@ -85,4 +73,3 @@ doCount = do server <- spawn (countServer 0 0 1) []
 
 main : IO ()
 main = runConc [()] doCount
->>>>>>> Added basic test suite
