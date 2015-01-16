@@ -1,0 +1,22 @@
+From Teller: Knock Knock
+From Mark: Who's there?
+From Teller: A mos
+From Mark: A mos who?
+From Teller: A mos Quito
+Alice -> Bob: Syn, 100
+Bob -> Alice: SynAck, 2, 101
+Alice -> Bob: Ack 3
+Received from Alice: 3
+/Users/jfdm/Library/Haskell/bin/idris -p effects -p protocols --nocolor TCPFail.idr -o shakefail
+TCPFail.idr:34:5:When elaborating right hand side of Main.case block in bob:
+When elaborating an application of function Effects.>>=:
+        Can't unify
+                Eff (MsgResult' (failMode tm) ()) [(GEN_MSG tm cs (DoSend x1 a k'))] (\send_ok => [GEN_MSG tm cs (send_cont x1 k' val send_ok)])
+        with
+                Eff a [(CONC_MSG [('Alice, client)] (DoSend 'Alice (TCPMsg SYNACK, Nat, Sigma Nat (\x'1 => x'1 = S x)) (\cmd1 => mkProcess 'Bob (case block in case block in handshake (TCPMsg SYN, Nat) SendLR msg x (msg, x) (TCPMsg SYNACK, Nat, Sigma Nat (\x'1 => x'1 = S x)) SendRL cmd1 cmd1) (\k => End)))), CONC, STDIO] xs'
+        
+        Specifically:
+                Can't unify
+                        []
+                with
+                        [CONC, STDIO]

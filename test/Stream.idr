@@ -6,7 +6,7 @@ import Effect.Msg
 
 import System.Protocol
 
-data Command = Next | SetIncrement | Stop 
+data Command = Next | SetIncrement | Stop
 
 instance Default Command where
   default = Stop
@@ -16,10 +16,10 @@ gcInfo x = do mkForeign (FFun "idris_gcInfo" [] FUnit)
               pure x
 
 count : Protocol ['Client, 'Server] ()
-count = do cmd <- 'Client ==> 'Server | Command 
+count = do cmd <- 'Client ==> 'Server | Command
            case cmd of
-              Next => do 'Server ==> 'Client | Int 
-                         Rec count 
+              Next => do 'Server ==> 'Client | Int
+                         Rec count
               SetIncrement => do 'Client ==> 'Server | Int
                                  Rec count
               Stop => Done
@@ -27,7 +27,7 @@ count = do cmd <- 'Client ==> 'Server | Command
 covering
 countServer : (c : Int) -> (v : Int) -> (inc : Int) -> (client : PID) ->
               Process count 'Server ['Client := client] [] ()
-countServer c v inc client 
+countServer c v inc client
         = do cmd <- recvFrom 'Client -- | fail
              case cmd of
                     Next => do () <- sendTo 'Client v -- | fail
@@ -39,7 +39,7 @@ countServer c v inc client
 covering
 countClient : (server : PID) ->
               Process count 'Client ['Server := server] [STDIO] ()
-countClient server = do 
+countClient server = do
                  putStr "More? ('n' to stop) "
                  x <- getStr
                  case (trim x /= "n") of
@@ -66,6 +66,7 @@ foo s = do setChan 'Server s
 --            return ()
 
 doCount : Process count 'Client [] [STDIO] ()
+<<<<<<< HEAD
 doCount = with Effects do 
              server <- spawn (countServer 0 0 1) []
              setChan 'Server server 
@@ -76,3 +77,12 @@ doCount = with Effects do
 -- main : IO ()
 -- main = runConc [()] doCount
 
+=======
+doCount = do server <- spawn (countServer 0 0 1) []
+             setChan 'Server server
+             countClient server
+             dropChan 'Server
+
+main : IO ()
+main = runConc [()] doCount
+>>>>>>> Added basic test suite

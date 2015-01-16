@@ -81,40 +81,9 @@ doKnockKnock setup reveal = runConc [()] (doKnock setup reveal)
        dropChan 'B
 
 
-processArgs : (List String) -> Maybe (String, String)
-processArgs [x] = Nothing
-processArgs (x::y::z) = Just (y, unwords z)
-
 -- -------------------------------------------------------------------- [ Main ]
-usage : String
-usage = unwords ["Usage: ./knockknock <setup> <reveal>"]
-
 namespace Main
   main : IO ()
-  main = do
-    args <- getArgs
-    case processArgs args of
-      Just (x,y) => doKnockKnock x y
-      Nothing => putStrLn usage
+  main = doKnockKnock "A mos" "Quito"
 
 -- --------------------------------------------------------------------- [ EOF ]
-{-
-[(CONC_MSG [('B, k)]
-  (DoSend 'B (Sigma String (\m => m = "Knock Knock"))
-    (\cmd => DoRecv 'B (Sigma String (\m => m = "Who's there?"))
-      (\cmd1 => DoSend 'B String
-        (\cmd2 => DoRecv 'B (Sigma String (\m => m = prim__concat cmd2 " who?"))
-          (\cmd3 => DoSend 'B (KnockRes (Just cmd2))
-            (\{x0} => End))))))), CONC, STDIO]
-
-[(CONC_MSG [('B, k)]
-  (DoRecv 'A (Sigma String (\m => m = "Knock Knock"))
-    (\cmd => DoSend 'A (Sigma String (\m => m = "Who's there?"))
-      (\cmd1 => DoRecv 'A String
-        (\cmd2 => DoSend 'A (Sigma String (\m => m = prim__concat cmd2 " who?"))
-          (\cmd3 => DoRecv 'A (KnockRes (Just cmd2))
-            (\{x0} => End))))))), CONC, STDIO]
-
-[(CONC_MSG [('B, k)] (DoSend 'B (Sigma String (\m => m = "Knock Knock")) (\cmd => DoRecv 'B (Sigma String (\m => m = "Who's there?")) (\cmd1 => DoSend 'B String (\cmd2 => DoRecv 'B (Sigma String (\m => m = prim__concat cmd2 " who?")) (\cmd3 => DoSend 'B (KnockRes (Just cmd2)) (\{x0} => End))))))), CONC, STDIO]
-[(CONC_MSG [('A, k)] (DoSend 'B (Sigma String (\m => m = "Knock Knock")) (\cmd => DoRecv 'B (Sigma String (\m => m = "Who's there?")) (\cmd1 => DoSend 'B String (\cmd2 => DoRecv 'B (Sigma String (\m => m = prim__concat cmd2 " who?")) (\cmd3 => DoSend 'B (KnockRes (Just cmd2)) (\{x0} => End))))))), CONC, STDIO]
--}
