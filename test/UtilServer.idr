@@ -3,10 +3,11 @@ module Main
 import Effects
 import Effect.StdIO
 import Effect.Default
+import Effect.Msg
 
 import System.Protocol
 
-data Command = Reverse | Add 
+data Command = Reverse | Add
 
 -- Describe a client/server protocol, to be run concurrently
 -- A ==> B | t    ... means "A sends a value of type t to B"
@@ -17,11 +18,11 @@ data Command = Reverse | Add
 util : Protocol ['Client, 'Server] ()
 util = do val <- 'Client ==> 'Server | Command
           case val of
-             Reverse => do 
+             Reverse => do
                'Client ==> 'Server | String
                'Server ==> 'Client | String
-               Done 
-             Add => do 
+               Done
+             Add => do
                x <- 'Client ==> 'Server | Int
                y <- 'Client ==> 'Server | Int
                'Server ==> 'Client | (z : Int ** z = x + y)
@@ -36,15 +37,15 @@ runServer client
           = do cmd <- recvFrom 'Client
                putStrLn "SERVER: Got command"
                case cmd of
-                    Reverse => do str <- lift' (recvFrom 'Client)
+                    Reverse => do str <- (recvFrom 'Client)
                                   putStrLn ("SERVER: Reversing " ++ str)
                                   sendTo 'Client (reverse str)
                     Add => do x <- recvFrom 'Client
                               y <- recvFrom 'Client
                               putStrLn ("SERVER: Adding " ++ show (x, y))
-                              sendTo 'Client (x + y ** refl) 
+                              sendTo 'Client (x + y ** Refl)
 
--- Ditto for a client 
+-- Ditto for a client
 
 runClient : (server : PID) ->
             Process util 'Client ['Server := server] [STDIO] ()
@@ -72,8 +73,8 @@ runClient server
 -- across a network (throwing an exception if the protocol was violated at
 -- run-time e.g. with some ill-formed message).
 
--- To run the thing, run each effectful program telling 'runClient' and 
--- 'runServer' what the client/server VM pointers are (null as a placeholder 
+-- To run the thing, run each effectful program telling 'runClient' and
+-- 'runServer' what the client/server VM pointers are (null as a placeholder
 -- for itself)
 
 runUtil : Process util 'Client [] [STDIO] ()
@@ -83,6 +84,6 @@ runUtil = do server <- spawn runServer [()]
              dropChan 'Server
 
 main : IO ()
-main = forever $ runConc [()] runUtil 
+main = forever $ runConc [()] runUtil
   where forever : IO () -> IO ()
         forever t = do t; forever t
